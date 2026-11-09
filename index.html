@@ -34,34 +34,20 @@
   [hidden] { display: none !important; }
 
   /* ---- En-tête ---- */
-  .topbar {
+  .head {
     background: var(--nuit);
     color: #fff;
-    text-align: center;
-    font-weight: 700;
-    font-size: 0.95rem;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 8px;
-  }
-  .idband {
-    background: var(--nuit);
     border-bottom: 4px solid var(--jaune);
-    padding: 4px 14px 12px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 12px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
   }
-  .idband img { max-height: 44px; max-width: 48%; background: #fff; border-radius: 8px; padding: 4px 10px; }
-  .idpill {
-    margin-left: auto;
-    background: var(--action-clair);
-    border: 1px solid #b9cdf3;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.82rem;
-    line-height: 1.35;
-  }
-  .idpill b { font-weight: 800; }
+  .head img { height: 60px; width: auto; max-width: 50%; object-fit: contain; flex: none; }
+  .headtext { flex: 1; min-width: 0; text-align: right; line-height: 1.35; }
+  .headtitle { font-weight: 800; font-size: 0.9rem; }
+  .headmeta { font-size: 0.8rem; color: #cfdcf3; }
+  .headmeta b { color: #fff; font-weight: 800; }
 
   main { max-width: 640px; margin: 0 auto; padding: 16px 14px calc(96px + env(safe-area-inset-bottom, 0px)); }
   h2 { margin: 18px 0 10px; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.01em; }
@@ -151,10 +137,10 @@
   }
   .qty button:first-child { border-radius: 10px 0 0 10px; }
   .qty button:last-child { border-radius: 0 10px 10px 0; }
-  .qty output {
-    flex: 1; display: flex; align-items: center; justify-content: center;
-    background: #fff; border-top: 2px solid var(--trait); border-bottom: 2px solid var(--trait);
-    font-size: 1.7rem; font-weight: 800;
+  .qty input {
+    flex: 1; min-width: 0; width: 100%; padding: 0; margin: 0;
+    text-align: center; font: inherit; font-size: 1.7rem; font-weight: 800; color: var(--texte);
+    background: #fff; border: 0; border-top: 2px solid var(--trait); border-bottom: 2px solid var(--trait); border-radius: 0;
   }
 
   /* ---- Bandeaux ---- */
@@ -206,7 +192,7 @@
   nav button { min-height: 58px; border: 0; background: none; font-weight: 700; color: var(--discret); cursor: pointer; border-top: 4px solid transparent; }
   nav button[aria-selected="true"] { color: var(--nuit); border-top-color: var(--jaune); }
 
-  button:focus-visible, select:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
   .fatal { padding: 48px 20px; text-align: center; font-weight: 600; }
   @media (prefers-reduced-motion: no-preference) {
     .banner { animation: pop 0.16s ease-out; }
@@ -215,11 +201,16 @@
 </style>
 </head>
 <body>
-<div class="topbar" id="title">Commandes</div>
-<div class="idband" id="idband" hidden>
+<header class="head">
   <img id="logo" alt="" hidden>
-  <div class="idpill">Atelier : <b id="g-name"></b><br>Date : <span id="g-date"></span></div>
-</div>
+  <div class="headtext">
+    <div class="headtitle" id="title">Commandes</div>
+    <div id="idband" hidden>
+      <div class="headmeta">Atelier : <b id="g-name"></b></div>
+      <div class="headmeta">Date : <span id="g-date"></span></div>
+    </div>
+  </div>
+</header>
 
 <main id="app" hidden>
   <div id="closed" class="banner closed" role="status" hidden><span class="ico">🕓</span><span id="closed-msg"></span></div>
@@ -258,7 +249,7 @@
 
     <div class="qty" role="group" aria-label="Quantité">
       <button type="button" id="q-minus" aria-label="Diminuer">−</button>
-      <output id="q-val" aria-live="polite">1</output>
+      <input id="q-val" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" value="1" aria-label="Quantité (saisie au clavier possible)">
       <button type="button" id="q-plus" aria-label="Augmenter">+</button>
     </div>
 
@@ -294,9 +285,9 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbzu6TlY6x4NI1r6JvgJvTpJ_yy_yYebB_Hrt0CUmVFrc2aHnS2ImHQc6IIZxAkvMD80/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
-const LOGO_URL = "logo-michelin.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
+const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
 
 const qs = new URLSearchParams(location.search);
@@ -447,7 +438,8 @@ function renderForm() {
   $("b-client").setAttribute("aria-pressed", String(state.mode === "client"));
 
   renderPick();
-  $("q-val").textContent = String(state.qty);
+  const qi = $("q-val");
+  if (document.activeElement !== qi) qi.value = String(state.qty);
 
   const item = currentItem();
   const dup = isDuplicate();
@@ -458,8 +450,8 @@ function renderForm() {
       "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
   }
 
-  $("add").disabled = state.busy || dup || !state.open || !item;
-  $("why").textContent = !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : "";
+  $("add").disabled = state.busy || dup || !state.open || !item || state.qty < 1;
+  $("why").textContent = !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
@@ -689,12 +681,14 @@ function addLine() {
     const item = currentItem();
     if (!place) throw new Error("Choisissez un lieu de livraison.");
     if (!item) throw new Error("Choisissez un pneu.");
+    if (state.qty < 1) throw new Error("Saisissez une quantité (1 à 999).");
     const data = await api("add", { lieu_id: place.id, cai: item.cai, quantite: state.qty });
     state.orders.unshift(data.order);
     // Remise à zéro : le pneu qu'on vient d'ajouter n'est plus sélectionné,
     // donc le bandeau de doublon n'apparaît que si on le rechoisit.
     $("sel-cai").value = "";
     state.qty = 1;
+    $("q-val").value = "1";
     state.historyLoaded = false;
   });
 }
@@ -761,8 +755,21 @@ async function init() {
   $("sel-client").addEventListener("focus", pickClient);
   $("sel-client").addEventListener("change", pickClient);
   $("sel-cai").addEventListener("change", renderForm);
-  $("q-minus").addEventListener("click", () => { state.qty = Math.max(1, state.qty - 1); renderForm(); });
-  $("q-plus").addEventListener("click", () => { state.qty = Math.min(999, state.qty + 1); renderForm(); });
+  const qi = $("q-val");
+  const setQty = (n) => { state.qty = n; qi.value = String(n); renderForm(); };
+  $("q-minus").addEventListener("click", () => setQty(Math.max(1, (state.qty || 1) - 1)));
+  $("q-plus").addEventListener("click", () => setQty(Math.min(999, (state.qty || 0) + 1)));
+  // Saisie au clavier : chiffres seulement, 1 à 999 ; champ vide = bouton Ajouter désactivé, remis à 1 en quittant le champ.
+  qi.addEventListener("input", () => {
+    const d = qi.value.replace(/\D/g, "").slice(0, 3);
+    if (d !== qi.value) qi.value = d;
+    const v = parseInt(d, 10);
+    state.qty = Number.isFinite(v) ? Math.min(v, 999) : 0;
+    renderForm();
+  });
+  qi.addEventListener("focus", () => qi.select());
+  qi.addEventListener("blur", () => { if (state.qty < 1) state.qty = 1; qi.value = String(state.qty); renderForm(); });
+  qi.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); qi.blur(); } });
   $("add").addEventListener("click", addLine);
   $("n-order").addEventListener("click", () => setTab("order"));
   $("n-track").addEventListener("click", () => setTab("track"));
