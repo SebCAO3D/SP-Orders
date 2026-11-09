@@ -191,7 +191,6 @@
   /* ---- Statuts ---- */
   .badge { display: inline-block; white-space: nowrap; border-radius: 999px; padding: 3px 10px; font-size: 0.8rem; font-weight: 700; }
   .badge.att { background: #fff1b8; color: #6b5200; }
-  .badge.tra { background: #ffe0c2; color: #8a4500; }
   .badge.com { background: #d6f2de; color: #14612e; }
   .qtyv { font-weight: 800; margin-right: 8px; }
 
@@ -295,7 +294,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbyD0j2RfHQyUN3ZWzV9D4zVOItoS0EHDRtSY3f5PYHNdBQ5_mwpnP1J6BrdsfPi8-c/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logo-michelin.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -308,19 +307,20 @@ const $ = (id) => document.getElementById(id);
 const state = {
   cfg: null, orders: [], history: [], historyLoaded: false,
   open: true, test: false, today: "",
-  tab: "order", mode: "atelier", qty: 1, filter: "all", busy: false,
+  tab: "order", mode: "atelier", qty: 1, filter: "En attente", busy: false,
 };
 
 const fr = (iso) => (iso || "").split("-").reverse().join("/");
 const frStamp = (s) => { const [d, t] = (s || "").split(" "); return fr(d) + (t ? " à " + t.replace(":", "h") : ""); };
 
+/** Deux statuts visibles : « Transmise » (envoyée à l'administrateur, pas encore commandée) s'affiche « En attente ». */
+const uiStatus = (s) => (s === "Transmise" ? "En attente" : s);
 const STATUS = {
   "En attente": { cls: "att", label: "🟡 En attente" },
-  "Transmise": { cls: "tra", label: "🟠 Transmise" },
   "Commandée": { cls: "com", label: "🟢 Commandée" },
 };
 function badge(statut) {
-  const s = STATUS[statut] || { cls: "att", label: statut };
+  const s = STATUS[uiStatus(statut)] || { cls: "att", label: uiStatus(statut) };
   const b = document.createElement("span");
   b.className = "badge " + s.cls;
   b.textContent = s.label;
@@ -557,7 +557,7 @@ function renderCart() {
 
 /* ---------- Rendu : suivi ---------- */
 
-const FILTERS = [["all", "Tout"], ["En attente", "En attente"], ["Transmise", "Transmise"], ["Commandée", "Commandée"]];
+const FILTERS = [["En attente", "En attente"], ["Commandée", "Commandée"]];
 
 function renderChips() {
   const box = $("chips");
@@ -576,7 +576,7 @@ function renderChips() {
 function renderHistory() {
   const box = $("history");
   box.replaceChildren();
-  const list = state.history.filter((o) => state.filter === "all" || o.statut === state.filter);
+  const list = state.history.filter((o) => uiStatus(o.statut) === state.filter);
   if (!state.historyLoaded) { box.append(emptyP("Chargement…")); return; }
   if (list.length === 0) { box.append(emptyP("Aucune commande à afficher.")); return; }
 
