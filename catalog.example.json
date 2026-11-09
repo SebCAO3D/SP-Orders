@@ -1,0 +1,6 @@
+[
+  { "cai": "154820", "designation": "295/80 R22.5 X MULTI Z - Neuf",   "famille": "Neuf",  "stock": "ok" },
+  { "cai": "154821", "designation": "315/80 R22.5 X MULTI Z - Neuf",   "famille": "Neuf",  "stock": "faible" },
+  { "cai": "262410", "designation": "295/80 R22.5 X MULTI Z - Remix",  "famille": "Remix", "stock": "ok" },
+  { "cai": "262411", "designation": "315/80 R22.5 X MULTI D - Remix",  "famille": "Remix", "stock": "rupture" }
+]

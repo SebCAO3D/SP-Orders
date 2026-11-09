@@ -1,0 +1,5 @@
+config/garages.json
+config/catalog.json
+__pycache__/
+.wrangler/
+node_modules/

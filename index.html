@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#002f6c">
+<title>Commande de pneus – Service Point</title>
+<style>
+  :root {
+    --nuit: #002f6c;
+    --jaune: #f8c200;
+    --action: #0052cc;
+    --fond: #eef1f6;
+    --carte: #ffffff;
+    --texte: #14213d;
+    --discret: #5b6678;
+    --trait: #d5dbe6;
+    --erreur: #c62828;
+    --erreur-fond: #fdecea;
+    --ok: #1b7f3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #0b1730;
+      --carte: #12244a;
+      --texte: #eef2fb;
+      --discret: #a9b6d0;
+      --trait: #2a3f6b;
+      --erreur-fond: #3a1a1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--fond);
+    color: var(--texte);
+    font: 17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  header {
+    background: var(--nuit);
+    color: #fff;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
+    border-bottom: 5px solid var(--jaune);
+  }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  header p { margin: 2px 0 0; color: #c9d6ee; font-size: 0.9rem; }
+  main { max-width: 640px; margin: 0 auto; padding: 14px 14px 40px; }
+  .card {
+    background: var(--carte);
+    border: 1px solid var(--trait);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  h2 { margin: 0 0 10px; font-size: 1.05rem; }
+  label.field { display: block; font-weight: 600; margin: 14px 0 6px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg.single { grid-template-columns: 1fr; }
+  button, select { font: inherit; }
+  .seg button {
+    min-height: 56px;
+    border: 2px solid var(--trait);
+    background: var(--carte);
+    color: var(--texte);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-weight: 600;
+  }
+  .seg button[aria-pressed="true"] {
+    border-color: var(--action);
+    background: var(--action);
+    color: #fff;
+  }
+  .lock { color: var(--discret); font-size: 0.9rem; margin-top: 6px; }
+  select {
+    width: 100%;
+    min-height: 54px;
+    border: 2px solid var(--trait);
+    border-radius: 10px;
+    background: var(--carte);
+    color: var(--texte);
+    padding: 0 10px;
+  }
+  .qty { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .qty button {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--nuit);
+    color: var(--jaune);
+    font-size: 2.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .qty output { min-width: 3ch; text-align: center; font-size: 2.6rem; font-weight: 800; }
+  .primary {
+    width: 100%;
+    min-height: 60px;
+    margin-top: 16px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--jaune);
+    color: var(--nuit);
+    font-size: 1.1rem;
+    font-weight: 800;
+  }
+  button:disabled { opacity: 0.4; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+  .banner {
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+  .banner.error { background: var(--erreur-fond); color: var(--erreur); border: 2px solid var(--erreur); }
+  .banner.closed { background: #fff6d6; color: #5c4600; border: 2px solid var(--jaune); }
+  @media (prefers-color-scheme: dark) { .banner.closed { background: #3a3000; color: #ffe27a; } }
+  .lieu-title { font-weight: 700; margin: 14px 0 6px; }
+  .lieu-title:first-of-type { margin-top: 0; }
+  .line {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--trait);
+  }
+  .line .name { font-weight: 600; }
+  .line .meta { color: var(--discret); font-size: 0.85rem; }
+  .mini { display: flex; align-items: center; gap: 6px; }
+  .mini button {
+    width: 44px; height: 44px;
+    border-radius: 8px;
+    border: 2px solid var(--trait);
+    background: var(--carte);
+    color: var(--texte);
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+  .mini output { min-width: 2.2ch; text-align: center; font-weight: 800; font-size: 1.1rem; }
+  .mini .del { color: var(--erreur); border-color: var(--erreur); font-size: 1.1rem; margin-left: 4px; }
+  .empty { color: var(--discret); text-align: center; padding: 10px 0; }
+  .status { white-space: nowrap; font-size: 0.85rem; }
+  .fatal { padding: 40px 20px; text-align: center; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) {
+    .banner { animation: pop 0.18s ease-out; }
+    @keyframes pop { from { transform: scale(0.98); opacity: 0.4; } }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Commande de pneus</h1>
+  <p id="subtitle">Chargement…</p>
+</header>
+
+<main id="app" hidden>
+  <div id="closed" class="banner closed" role="status" hidden></div>
+  <div id="error" class="banner error" role="alert" hidden></div>
+
+  <section class="card" aria-labelledby="h-new">
+    <h2 id="h-new">Nouvelle ligne</h2>
+
+    <label class="field" id="lbl-lieu">Livraison</label>
+    <div class="seg" id="seg-lieu" role="group" aria-labelledby="lbl-lieu">
+      <button type="button" id="b-atelier" aria-pressed="true">Mon atelier</button>
+      <button type="button" id="b-client" aria-pressed="false">Client utilisateur</button>
+    </div>
+    <div class="lock" id="atelier-info"></div>
+
+    <div id="client-wrap" hidden>
+      <label class="field" for="sel-client">Client</label>
+      <select id="sel-client"></select>
+    </div>
+
+    <label class="field" for="sel-cai">Référence</label>
+    <select id="sel-cai"></select>
+
+    <label class="field" id="lbl-qty">Quantité</label>
+    <div class="qty" role="group" aria-labelledby="lbl-qty">
+      <button type="button" id="q-minus" aria-label="Diminuer">−</button>
+      <output id="q-val" aria-live="polite">1</output>
+      <button type="button" id="q-plus" aria-label="Augmenter">+</button>
+    </div>
+
+    <div id="dup" class="banner error" role="alert" hidden style="margin:16px 0 0">
+      Cette référence est déjà dans le panier pour ce lieu. Ajustez la quantité sur la ligne existante.
+    </div>
+
+    <button type="button" class="primary" id="add">Ajouter au panier</button>
+  </section>
+
+  <section class="card" aria-labelledby="h-cart">
+    <h2 id="h-cart">Panier du <span id="today"></span></h2>
+    <div id="cart"></div>
+  </section>
+</main>
+
+<div id="fatal" class="fatal" hidden></div>
+
+<script>
+"use strict";
+
+/* ========= À MODIFIER UNE SEULE FOIS ========= */
+const API_URL = "https://commandes-sp.VOTRE-SOUS-DOMAINE.workers.dev";
+/* ============================================= */
+
+const qs = new URLSearchParams(location.search);
+const GARAGE = (qs.get("garage") || "").trim().toLowerCase();
+const KEY = qs.get("k") || "";
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  cfg: null,
+  orders: [],
+  open: true,
+  today: "",
+  mode: "atelier",   // "atelier" | "client"
+  qty: 1,
+  busy: false,
+};
+
+const STOCK_DOT = { ok: "🟢", faible: "🟠", rupture: "🔴" };
+
+async function api(path, options = {}) {
+  let res;
+  try {
+    res = await fetch(API_URL + path, {
+      ...options,
+      headers: { "Content-Type": "application/json", "X-Garage": GARAGE, "X-Key": KEY },
+    });
+  } catch {
+    throw new Error("Pas de connexion. Vos lignes déjà ajoutées sont enregistrées ; réessayez dans un instant.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || "Erreur inattendue.");
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function showError(msg) {
+  const el = $("error");
+  el.textContent = msg || "";
+  el.hidden = !msg;
+}
+
+function currentPlace() {
+  if (state.mode === "atelier") return state.cfg.lieux.find((p) => p.id === "atelier");
+  return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
+}
+
+function isDuplicate() {
+  const place = currentPlace();
+  const cai = $("sel-cai").value;
+  if (!place || !cai) return false;
+  return state.orders.some(
+    (o) => o.date === state.today && o.code_tiers === place.code_tiers && String(o.cai) === String(cai),
+  );
+}
+
+function editable(o) {
+  return state.open && o.statut === "En attente" && o.date === state.today;
+}
+
+/* ---------- Rendu ---------- */
+
+function renderForm() {
+  const atelier = state.cfg.lieux.find((p) => p.id === "atelier");
+  const clients = state.cfg.lieux.filter((p) => p.type === "client");
+
+  $("b-client").hidden = clients.length === 0;
+  $("seg-lieu").classList.toggle("single", clients.length === 0);
+  $("b-atelier").setAttribute("aria-pressed", String(state.mode === "atelier"));
+  $("b-client").setAttribute("aria-pressed", String(state.mode === "client"));
+  $("client-wrap").hidden = state.mode !== "client";
+  $("atelier-info").textContent =
+    state.mode === "atelier" ? `Adresse verrouillée : ${atelier.label} (${atelier.code_tiers})` : "";
+
+  const dup = isDuplicate();
+  $("dup").hidden = !dup;
+  $("add").disabled = state.busy || dup || !state.open || !$("sel-cai").value;
+  $("q-val").textContent = String(state.qty);
+}
+
+function buildSelects() {
+  const selClient = $("sel-client");
+  selClient.replaceChildren();
+  for (const p of state.cfg.lieux.filter((x) => x.type === "client")) {
+    selClient.append(new Option(p.label, p.id));
+  }
+
+  const selCai = $("sel-cai");
+  selCai.replaceChildren();
+  const groups = new Map();
+  for (const item of state.cfg.catalogue) {
+    if (!groups.has(item.famille)) {
+      const g = document.createElement("optgroup");
+      g.label = item.famille;
+      groups.set(item.famille, g);
+      selCai.append(g);
+    }
+    const dot = STOCK_DOT[item.stock] || "⚪";
+    const opt = new Option(`${dot} ${item.cai} – ${item.designation}`, item.cai);
+    if (item.stock === "rupture") opt.disabled = true;
+    groups.get(item.famille).append(opt);
+  }
+  const first = [...selCai.options].find((o) => !o.disabled);
+  if (first) selCai.value = first.value;
+}
+
+function renderCart() {
+  const box = $("cart");
+  box.replaceChildren();
+  $("today").textContent = state.today.split("-").reverse().join("/");
+
+  if (state.orders.length === 0) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Panier vide. Ajoutez une première référence ci-dessus.";
+    box.append(p);
+    return;
+  }
+
+  const byPlace = new Map();
+  for (const o of state.orders) {
+    const k = o.code_tiers;
+    if (!byPlace.has(k)) byPlace.set(k, { label: o.lieu, items: [] });
+    byPlace.get(k).items.push(o);
+  }
+
+  for (const { label, items } of byPlace.values()) {
+    const t = document.createElement("div");
+    t.className = "lieu-title";
+    t.textContent = label;
+    box.append(t);
+
+    for (const o of items) {
+      const row = document.createElement("div");
+      row.className = "line";
+
+      const left = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = o.designation;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `CAI ${o.cai}` + (o.date !== state.today ? ` · du ${o.date.split("-").reverse().join("/")}` : "");
+      left.append(name, meta);
+
+      const right = document.createElement("div");
+      right.className = "mini";
+      if (editable(o)) {
+        right.append(
+          miniBtn("−", `Diminuer ${o.designation}`, () => changeQty(o, o.quantite - 1), o.quantite <= 1),
+          out(o.quantite),
+          miniBtn("+", `Augmenter ${o.designation}`, () => changeQty(o, o.quantite + 1), false),
+          miniBtn("✕", `Supprimer ${o.designation}`, () => removeLine(o), false, "del"),
+        );
+      } else {
+        const s = document.createElement("span");
+        s.className = "status";
+        s.textContent = `${o.statut === "Commandée" ? "🟢" : "🟡"} ${o.statut} · ×${o.quantite}`;
+        right.append(s);
+      }
+      row.append(left, right);
+      box.append(row);
+    }
+  }
+}
+
+function miniBtn(text, label, onClick, disabled, cls) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = text;
+  b.setAttribute("aria-label", label);
+  b.disabled = disabled || state.busy;
+  if (cls) b.className = cls;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function out(n) {
+  const o = document.createElement("output");
+  o.textContent = String(n);
+  return o;
+}
+
+function renderAll() {
+  const closed = $("closed");
+  closed.textContent = state.open ? "" : state.cfg.message || "Saisie fermée.";
+  closed.hidden = state.open;
+  renderForm();
+  renderCart();
+}
+
+/* ---------- Actions ---------- */
+
+async function guarded(fn) {
+  if (state.busy) return;
+  state.busy = true;
+  showError("");
+  renderAll();
+  try {
+    await fn();
+  } catch (e) {
+    showError(e.message);
+    if (e.status === 409) await refresh(true);
+  } finally {
+    state.busy = false;
+    renderAll();
+  }
+}
+
+async function refresh(silent) {
+  try {
+    const data = await api("/api/orders");
+    state.orders = data.orders;
+    state.today = data.today;
+    state.open = data.open;
+    if (state.cfg && !data.open && !state.cfg.message) {
+      state.cfg.message = "Clôture de 16h30 passée. Réouverture au prochain jour ouvré.";
+    }
+    renderAll();
+  } catch (e) {
+    if (!silent) showError(e.message);
+  }
+}
+
+function addLine() {
+  return guarded(async () => {
+    const place = currentPlace();
+    if (!place) throw new Error("Choisissez un lieu de livraison.");
+    const data = await api("/api/orders", {
+      method: "POST",
+      body: JSON.stringify({ lieu_id: place.id, cai: $("sel-cai").value, quantite: state.qty }),
+    });
+    state.orders.unshift(data.order);
+    state.qty = 1;
+  });
+}
+
+function changeQty(order, q) {
+  return guarded(async () => {
+    const data = await api(`/api/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ quantite: q }) });
+    Object.assign(order, data.order);
+  });
+}
+
+function removeLine(order) {
+  if (!confirm(`Supprimer « ${order.designation} » du panier ?`)) return;
+  return guarded(async () => {
+    await api(`/api/orders/${order.id}`, { method: "DELETE" });
+    state.orders = state.orders.filter((o) => o.id !== order.id);
+  });
+}
+
+/* ---------- Démarrage ---------- */
+
+function fatal(msg) {
+  $("app").hidden = true;
+  const f = $("fatal");
+  f.hidden = false;
+  f.textContent = msg;
+  $("subtitle").textContent = "";
+}
+
+async function init() {
+  if (!GARAGE || !KEY) {
+    return fatal("Lien incomplet. Utilisez le lien complet fourni par l'administrateur.");
+  }
+  try {
+    state.cfg = await api("/api/config");
+  } catch (e) {
+    return fatal(e.message);
+  }
+  state.today = state.cfg.today;
+  state.open = state.cfg.open;
+  $("title").textContent = state.cfg.garage.nom;
+  $("subtitle").textContent = "Réapprovisionnement · clôture à 16h30";
+  document.title = `${state.cfg.garage.nom} – Commande de pneus`;
+  buildSelects();
+  $("app").hidden = false;
+
+  $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; renderForm(); });
+  $("b-client").addEventListener("click", () => { state.mode = "client"; renderForm(); });
+  $("sel-client").addEventListener("change", renderForm);
+  $("sel-cai").addEventListener("change", renderForm);
+  $("q-minus").addEventListener("click", () => { state.qty = Math.max(1, state.qty - 1); renderForm(); });
+  $("q-plus").addEventListener("click", () => { state.qty = Math.min(999, state.qty + 1); renderForm(); });
+  $("add").addEventListener("click", addLine);
+
+  await refresh();
+  setInterval(() => refresh(true), 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(true); });
+}
+
+init();
+</script>
+</body>
+</html>

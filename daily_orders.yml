@@ -1,0 +1,45 @@
+name: Consolidation quotidienne des commandes
+
+on:
+  schedule:
+    # GitHub Actions cron = UTC uniquement. Deux déclencheurs couvrent l'heure d'été
+    # (16h30 Paris = 14h30 UTC) et l'heure d'hiver (16h30 Paris = 15h30 UTC).
+    # main.py ignore le déclenchement trop tôt, et un 2e passage sans ligne "En attente"
+    # ne fait rien (aucun email en double).
+    - cron: "30 14 * * 1-5"
+    - cron: "30 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Ignorer le contrôle d'heure (test manuel)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-orders
+  cancel-in-progress: false
+
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Consolider et notifier
+        env:
+          BASEROW_API_URL: ${{ secrets.BASEROW_API_URL }}
+          BASEROW_TOKEN: ${{ secrets.BASEROW_TOKEN }}
+          BASEROW_ORDERS_TABLE_ID: ${{ secrets.BASEROW_ORDERS_TABLE_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
+          BIBSERV_URL: ${{ vars.BIBSERV_URL }}
+          FORCE_RUN: ${{ inputs.force && '1' || '0' }}
+        run: python main.py

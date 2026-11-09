@@ -1,0 +1,19 @@
+{
+  "nord": {
+    "nom": "Garage Nord",
+    "key": "REMPLACER-PAR-UNE-CLE-ALEATOIRE-DE-32-CARACTERES-MINIMUM",
+    "atelier": { "libelle": "Atelier Nord", "code_tiers": "TL-10001" },
+    "clients": [
+      { "id": "transports-dupont", "nom": "Transports Dupont", "code_tiers": "TL-98421" },
+      { "id": "martin-logistique", "nom": "Martin Logistique", "code_tiers": "TL-98422" }
+    ]
+  },
+  "sud": {
+    "nom": "Garage Sud",
+    "key": "UNE-AUTRE-CLE-ALEATOIRE-DIFFERENTE-POUR-LE-SUD-0000",
+    "atelier": { "libelle": "Atelier Sud", "code_tiers": "TL-10002" },
+    "clients": [
+      { "id": "sud-express", "nom": "Sud Express", "code_tiers": "TL-98530" }
+    ]
+  }
+}

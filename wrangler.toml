@@ -1,0 +1,6 @@
+name = "commandes-sp"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# Les secrets ne vont PAS ici. Voir README.md : "wrangler secret put ..."
