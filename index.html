@@ -285,7 +285,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbyAMgUMahwqbB7-NWdxpoUPStQxVgRvptFrhVCq565_kn4x7QbrRnJI9R_W5PJk99ET/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -655,7 +655,7 @@ async function refresh(silent) {
     state.today = data.today;
     state.open = data.open;
     state.test = !!data.test;
-    if (!data.open && !state.cfg.message) state.cfg.message = "Clôture de 17h30 passée. Réouverture au prochain jour ouvré.";
+    if (!data.open && !state.cfg.message) state.cfg.message = "Clôture passée. Réouverture au prochain jour ouvré.";
     renderAll();
   } catch (e) {
     if (!silent) showError(e.message);
