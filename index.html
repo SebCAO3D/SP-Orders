@@ -285,7 +285,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbyCTTgLRVjNBHa-2Hdi5dpx0owlO2OthKM3VmmUKRwpRZfRbk8Xq2nbsOmrllZ9ks6p/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -381,6 +381,12 @@ function currentPlace() {
   return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
 }
 function currentItem() { return state.cfg.catalogue.find((c) => String(c.cai) === $("sel-cai").value); }
+/** Références proposées pour le lieu choisi : un client peut être limité à certains CAI (colonne de l'onglet Clients). */
+function allowedItems() {
+  const p = currentPlace();
+  const list = p && Array.isArray(p.cais) ? p.cais.map(String) : null;
+  return list ? state.cfg.catalogue.filter((c) => list.includes(String(c.cai))) : state.cfg.catalogue;
+}
 
 /** Doublon = même CAI, même lieu (code tiers), même jour. Uniquement quand un pneu est choisi. */
 function isDuplicate() {
@@ -459,10 +465,15 @@ function buildSelects() {
   selClient.replaceChildren();
   for (const p of clients()) selClient.append(new Option(p.label, p.id));
 
+  buildCai();
+}
+
+function buildCai() {
   const selCai = $("sel-cai");
+  const keep = selCai.value;
   selCai.replaceChildren(new Option("Choisir un pneu…", ""));
   const groups = new Map();
-  for (const item of state.cfg.catalogue) {
+  for (const item of allowedItems()) {
     if (!groups.has(item.famille)) {
       const g = document.createElement("optgroup");
       g.label = item.famille;
@@ -474,7 +485,7 @@ function buildSelects() {
     if (item.stock === "rupture") opt.disabled = true;
     groups.get(item.famille).append(opt);
   }
-  selCai.value = "";
+  selCai.value = [...selCai.options].some((o) => o.value === keep && !o.disabled) ? keep : "";
 }
 
 /* ---------- Rendu : panier ---------- */
@@ -749,8 +760,8 @@ async function init() {
   $("app").hidden = false;
   $("nav").hidden = false;
 
-  const pickClient = () => { state.mode = "client"; renderForm(); };
-  $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; renderForm(); });
+  const pickClient = () => { state.mode = "client"; buildCai(); renderForm(); };
+  $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; buildCai(); renderForm(); });
   $("b-client").addEventListener("click", pickClient);
   $("sel-client").addEventListener("focus", pickClient);
   $("sel-client").addEventListener("change", pickClient);
