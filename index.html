@@ -205,7 +205,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://commandes-sp.VOTRE-SOUS-DOMAINE.workers.dev";
+const API_URL = "COLLEZ-ICI-L-ADRESSE-DE-VOTRE-APPLICATION-WEB-GOOGLE";
 /* ============================================= */
 
 const qs = new URLSearchParams(location.search);
@@ -225,20 +225,22 @@ const state = {
 
 const STOCK_DOT = { ok: "🟢", faible: "🟠", rupture: "🔴" };
 
-async function api(path, options = {}) {
+async function api(action, payload = {}) {
   let res;
   try {
-    res = await fetch(API_URL + path, {
-      ...options,
-      headers: { "Content-Type": "application/json", "X-Garage": GARAGE, "X-Key": KEY },
+    // Requête "simple" (sans en-tête personnalisé) : requise par Google Apps Script.
+    res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({ action, garage: GARAGE, key: KEY, ...payload }),
     });
   } catch {
     throw new Error("Pas de connexion. Vos lignes déjà ajoutées sont enregistrées ; réessayez dans un instant.");
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  const data = await res.json().catch(() => null);
+  if (!data) throw new Error("Réponse inattendue du serveur. Réessayez dans un instant.");
+  if (!data.ok) {
     const err = new Error(data.error || "Erreur inattendue.");
-    err.status = res.status;
+    err.status = data.status;
     throw err;
   }
   return data;
@@ -419,7 +421,7 @@ async function guarded(fn) {
 
 async function refresh(silent) {
   try {
-    const data = await api("/api/orders");
+    const data = await api("orders");
     state.orders = data.orders;
     state.today = data.today;
     state.open = data.open;
@@ -436,10 +438,7 @@ function addLine() {
   return guarded(async () => {
     const place = currentPlace();
     if (!place) throw new Error("Choisissez un lieu de livraison.");
-    const data = await api("/api/orders", {
-      method: "POST",
-      body: JSON.stringify({ lieu_id: place.id, cai: $("sel-cai").value, quantite: state.qty }),
-    });
+    const data = await api("add", { lieu_id: place.id, cai: $("sel-cai").value, quantite: state.qty });
     state.orders.unshift(data.order);
     state.qty = 1;
   });
@@ -447,7 +446,7 @@ function addLine() {
 
 function changeQty(order, q) {
   return guarded(async () => {
-    const data = await api(`/api/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ quantite: q }) });
+    const data = await api("update", { id: order.id, quantite: q });
     Object.assign(order, data.order);
   });
 }
@@ -455,7 +454,7 @@ function changeQty(order, q) {
 function removeLine(order) {
   if (!confirm(`Supprimer « ${order.designation} » du panier ?`)) return;
   return guarded(async () => {
-    await api(`/api/orders/${order.id}`, { method: "DELETE" });
+    await api("delete", { id: order.id });
     state.orders = state.orders.filter((o) => o.id !== order.id);
   });
 }
@@ -471,11 +470,14 @@ function fatal(msg) {
 }
 
 async function init() {
+  if (API_URL.startsWith("COLLEZ")) {
+    return fatal("Page non configurée : l'administrateur doit renseigner l'adresse de l'application Google dans index.html.");
+  }
   if (!GARAGE || !KEY) {
     return fatal("Lien incomplet. Utilisez le lien complet fourni par l'administrateur.");
   }
   try {
-    state.cfg = await api("/api/config");
+    state.cfg = await api("config");
   } catch (e) {
     return fatal(e.message);
   }
