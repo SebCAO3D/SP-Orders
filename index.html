@@ -101,6 +101,8 @@
     cursor: pointer;
   }
   .place svg { width: 34px; height: 34px; stroke: var(--nuit); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .ico-slot { display: flex; align-items: center; justify-content: center; min-height: 38px; }
+  .place .logo { height: 38px; max-width: 62%; object-fit: contain; }
   .place .t { font-weight: 800; color: var(--nuit); }
   .place .s { font-size: 0.8rem; color: var(--discret); }
   .place select {
@@ -228,14 +230,14 @@
     <div class="places" id="places" role="group" aria-labelledby="h-lieu">
       <div class="place on" id="p-atelier">
         <button type="button" class="place-btn" id="b-atelier" aria-pressed="true">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+          <span class="ico-slot" id="ico-atelier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M8 13h8M8 16h8M8 19h8"/></svg></span>
           <span class="t" id="a-title">Atelier garage (SP)</span>
           <span class="s" id="a-sub"></span>
         </button>
       </div>
       <div class="place" id="p-client">
         <button type="button" class="place-btn" id="b-client" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg>
+          <span class="ico-slot" id="ico-client"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></span>
           <span class="t">Client utilisateur</span>
         </button>
         <select id="sel-client" aria-label="Client utilisateur"></select>
@@ -290,7 +292,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbwZc8PwKaqkFTiym1C0FlfzFLCQs3EL3eK5sE4azo0oevy6h_oTGUZB3lbfDhkWYinC/exec";
+const API_URL = "COLLEZ-ICI-L-ADRESSE-DE-VOTRE-APPLICATION-WEB-GOOGLE";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = ""; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -346,6 +348,36 @@ function showError(msg) {
 }
 
 /* ---------- Données dérivées ---------- */
+
+/** N'accepte qu'une adresse https ou un fichier image du dépôt (ex. logos/dupont.png). */
+function safeLogo(u) {
+  u = (u || "").trim();
+  if (/^https:\/\/[^\s"'<>]+$/i.test(u)) return u;
+  if (/^[\w\-]+(\/[\w\-]+)*\.(png|jpe?g|svg|webp|gif)$/i.test(u)) return u;
+  return "";
+}
+
+/** Affiche le logo s'il existe et se charge, sinon garde l'icône par défaut. */
+function setIcon(slotId, logo) {
+  const slot = $(slotId);
+  const url = safeLogo(logo);
+  const svg = slot.querySelector("svg");
+  const old = slot.querySelector("img");
+  if (old) old.remove();
+  if (!url) { svg.removeAttribute("hidden"); return; }
+  const img = document.createElement("img");
+  img.className = "logo";
+  img.alt = "";
+  img.addEventListener("load", () => { svg.setAttribute("hidden", ""); });
+  img.addEventListener("error", () => { img.remove(); svg.removeAttribute("hidden"); });
+  img.src = url;
+  slot.append(img);
+}
+
+function clientLogo() {
+  const c = clients().find((x) => x.id === $("sel-client").value);
+  return c ? c.logo : "";
+}
 
 function atelier() { return state.cfg.lieux.find((p) => p.id === "atelier"); }
 function clients() { return state.cfg.lieux.filter((p) => p.type === "client"); }
@@ -403,6 +435,8 @@ function renderForm() {
   $("places").classList.toggle("single", cl.length === 0);
   $("a-title").textContent = a.label;
   $("a-sub").textContent = a.adresse || a.code_tiers;
+  setIcon("ico-atelier", a.logo || state.cfg.garage.logo);
+  setIcon("ico-client", clientLogo());
   $("p-atelier").classList.toggle("on", state.mode === "atelier");
   $("p-client").classList.toggle("on", state.mode === "client");
   $("b-atelier").setAttribute("aria-pressed", String(state.mode === "atelier"));
