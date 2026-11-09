@@ -1,0 +1,187 @@
+# Application « Commandes SP » – récapitulatif complet
+
+Document de référence pour comprendre, réinstaller ou reproduire l'application telle qu'elle est aujourd'hui.
+Il décrit l'architecture, la structure du Google Sheet, les règles de fonctionnement, l'installation pas à pas et les pièges rencontrés.
+
+**À conserver avec ce document sur GitHub (ce sont les sources, ce récapitulatif ne les remplace pas) :**
+- `index.html` : la page des garages (hébergée par GitHub Pages)
+- `michelin-transparent.png` : logo de l'en-tête
+- `Code-Google-Apps-Script.txt` : le script à coller dans Apps Script (dernière version)
+- `logos.zip` (ou un dossier `logos/`) : logos des garages et clients (logo-michelin.png, bestdrive.png, firststop.png, points.png, logo-5.png)
+
+---
+
+## 1. Objectif
+
+Application web mobile pour les garages Michelin Service Point : ils saisissent leurs besoins de réassort de pneus.
+L'administrateur reçoit **un email consolidé** et passe les commandes **à la main sur BibServ** (aucun robot, aucune connexion automatique à BibServ).
+
+Principes du cahier des charges d'origine :
+- Rôles : l'administrateur (maître de tout) et les garages (accès par leur lien). Les clients transporteurs n'ont **aucun accès**.
+- **Confidentialité stricte entre garages** : un garage ne voit jamais les lignes d'un autre.
+- Aucune plaque d'immatriculation.
+- **Date non falsifiable** : c'est le serveur qui pose la date du jour (le garage ne peut pas la choisir).
+- **Anti-doublon** : clé = Date + Garage + Code Tiers Livré + Code CAI.
+- **1 lot = 1 Code Tiers Livré**, avec les quantités des mêmes CAI additionnées.
+- Charte Michelin : bleu #002f6c, jaune #f8c200, bleu vif #0052cc. Interface pensée mobile d'abord.
+
+---
+
+## 2. Architecture (100 % gratuite, sans nom de domaine)
+
+| Élément | Rôle | Où |
+|---|---|---|
+| **GitHub Pages** | Héberge `index.html` (la page vue par les garages) | dépôt `sebcao3d/SP-Orders`, page : https://sebcao3d.github.io/SP-Orders/ |
+| **Google Sheet** | Base de données (commandes, garages, clients, catalogue, réglages) | votre Google Drive |
+| **Google Apps Script** | « Serveur » : API, vérifications, emails, déclencheurs | lié au Sheet (Extensions → Apps Script) |
+
+Fonctionnement : la page envoie des requêtes (POST JSON) à l'adresse du Web App Apps Script (`https://script.google.com/macros/s/…/exec`). Le script lit/écrit le Sheet et envoie les emails avec MailApp (compte Google de l'administrateur).
+
+Adresse du Web App utilisée dans `index.html` (constante `API_URL`) :
+`https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec`
+
+Historique de décision : une première architecture avec Baserow + Cloudflare Worker a été abandonnée au profit de **tout dans Google** (plus simple, rien à payer).
+
+---
+
+## 3. Le Google Sheet : 5 onglets
+
+L'onglet « Lots » a été supprimé : **tout se passe dans Commandes**.
+Les onglets sont créés/mis à jour par le menu **Commandes SP → 1. Installer** (relançable sans risque).
+
+### 3.1 Commandes (alimenté par l'application)
+Colonnes : `Date | Garage | Lieu_Livraison | Code_Tiers_Livre | Code_CAI | Designation | Quantite | Statut | ID | Envoye | Date_Validation`
+- **Statut** : deux valeurs seulement, liste déroulante : **En attente** ou **OK CDE**. (Les garages voient « En attente » / « Commandée ».)
+- `ID` et `Envoye` sont masquées (techniques). `Envoye` = horodatage d'envoi dans l'email ; `Date_Validation` = date de votre OK CDE.
+- **Code_CAI** et **Designation** : listes déroulantes alimentées par l'onglet Catalogue. Choisir l'une remplit automatiquement l'autre (dans les deux sens, sur n'importe quelle ligne, même saisie à la main), et un message indique le stock (OK / faible / rupture). Une valeur absente du Catalogue est refusée (retour à l'ancienne valeur).
+
+### 3.2 Garages
+Colonnes : `id | nom | cle | atelier_libelle | atelier_code_tiers | lien | atelier_adresse | logo`
+- `cle` : la clé secrète du garage, **au choix de l'administrateur** (1 caractère minimum, sensible à la casse, espaces retirés aux extrémités, aucune limite maximum). Deux garages ne doivent pas avoir la même clé.
+- `lien` : colonne calculée (formule) = `Reglages!B3 & "?k=" & ENCODEURL(clé)`. C'est le lien à envoyer au garage.
+- `logo` : nom du fichier (ex. `bestdrive.png`) ou adresse complète `https://…`. Le fichier doit être dans le dépôt GitHub à côté de `index.html`.
+
+### 3.3 Clients (transporteurs livrés par un garage)
+Colonnes : `garage | id | nom | code_tiers | adresse | logo | references_autorisees`
+- `garage` = l'id du garage propriétaire (le client n'est visible que de ce garage).
+- `references_autorisees` (optionnel) : limite les pneus proposés pour ce client. Séparateurs `;` `,` ou retour à la ligne. Chaque élément = un **CAI exact** (`262410`) ou une **dimension / début de désignation** (`315/80 R22.5`). Vide = tout le catalogue. L'atelier du garage n'est jamais limité. Contrôlé aussi côté serveur.
+
+### 3.4 Catalogue
+Colonnes : `cai | designation | famille | stock | recommande | stock_libelle`
+- `famille` : Neuf / Remix (regroupe la liste côté garage).
+- `stock` : `ok`, `faible` ou `rupture` (liste déroulante). Une référence en rupture est grisée et **refusée côté serveur**.
+- `recommande` : `oui` affiche « ★ Recommandé ». `stock_libelle` : texte libre affiché à la place du libellé de stock standard.
+
+### 3.5 Reglages (valeurs lues en colonne B)
+| Case | Contenu |
+|---|---|
+| B1 | Email de l'administrateur (reçoit le récapitulatif) |
+| B2 | Lien BibServ (affiché dans l'email) |
+| B3 | Adresse de la page des garages (`https://sebcao3d.github.io/SP-Orders/`) |
+| B4 | **Mode test** `oui/non` : `oui` = saisie ouverte à toute heure, y compris week-end (remettre `non` ensuite) |
+| B5 | Prévenir par email à chaque ligne ajoutée `oui/non` (toujours actif en mode test) |
+| B6 | **Heure limite de commande des garages** (ex. `17:30`, `17h30`, `16h`, `16.45`). Défaut 17:30. Valeur illisible = 17h30 |
+
+---
+
+## 4. Règles de fonctionnement
+
+**Pour le garage (page web, lien `…/SP-Orders/?k=SA_CLE`)**
+- Identifié par la clé seule (l'ancien format `?garage=…&k=…` marche encore). Clé inconnue ou ambiguë → « Accès refusé ».
+- Choisit le lieu de livraison (atelier ou un de ses clients), le pneu dans une liste (étoile Recommandé, stock affiché, regroupée Neuf/Remix), la quantité (saisie au clavier **ou** boutons − / +, 1 à 999), puis ajoute au panier.
+- Panier du jour : modifier la quantité ou supprimer **tant que** l'heure limite n'est pas passée, que la ligne est « En attente » et qu'elle n'a pas été envoyée par email.
+- L'avertissement « déjà commandé » n'apparaît que si le pneu sélectionné est déjà dans le panier du jour pour le même lieu (pas à chaque ajout).
+- Onglet **Suivi** : historique sur 60 jours, filtres **En attente** / **Commandée** uniquement, avec la date de validation.
+- Bandeau « mode test » visible quand le mode test est actif. Rafraîchissement automatique toutes les 60 s.
+- Saisie fermée après l'heure limite et le week-end (sauf mode test).
+
+**Côté serveur (le garage ne peut pas tricher)**
+- Date posée par le serveur (fuseau Europe/Paris).
+- Anti-doublon vérifié côté serveur, quantité entière 1–999, lieu/CAI validés, rupture refusée, référence non autorisée pour un client refusée.
+- Un garage ne peut modifier/supprimer que ses propres lignes (sinon « introuvable »).
+- Verrou (LockService) autour des écritures. L'email est envoyé **avant** de marquer les lignes envoyées, pour ne rien perdre en cas d'échec.
+
+**Pour l'administrateur**
+1. Après l'heure limite (au plus ~30 min après), email « [BibServ] N lot(s) à commander » : un lot par Code Tiers Livré, quantités additionnées par CAI. Les lignes restent « En attente » mais sont marquées envoyées (jamais renvoyées).
+2. Vous passez les commandes sur BibServ à la main.
+3. Dans **Commandes**, colonne **Statut**, choisissez **OK CDE** sur les lignes concernées (collage multiple possible, « ok cde » en minuscules est corrigé). La date de validation s'écrit toute seule et les garages voient « Commandée ».
+4. Pour corriger une erreur : vider la cellule ou remettre « En attente ».
+5. Menu **Tout valider (OK CDE)** : valide d'un coup toutes les lignes déjà envoyées.
+6. Vous pouvez changer CAI / Désignation d'une ligne depuis les listes déroulantes (selon le stock). Cela n'envoie pas de nouvel email.
+
+---
+
+## 5. Menu « Commandes SP » (dans le Sheet)
+
+1. **Installer** : crée/met à jour les onglets, listes déroulantes, formules de liens, masque les colonnes techniques, migre l'ancien système (statuts Transmise/Commandée → En attente/OK CDE, suppression de l'onglet Lots et de la colonne Lot), crée les 2 déclencheurs.
+2. **Remplacer les clés…** : génère de nouvelles clés aléatoires (10 caractères) pour tous les garages sans réutiliser une clé existante. Pour garder vos clés choisies, ne pas l'utiliser.
+3. **Envoyer un email de test** : envoie un exemple à l'adresse B1 sans modifier aucune donnée (objet `[TEST]`).
+4. **Tout valider (OK CDE) : lignes déjà envoyées**.
+5. **Lancer la consolidation maintenant** : force l'envoi du récapitulatif.
+
+**Déclencheurs (installables, créés par « Installer »)**
+- `consoliderAuto` : toutes les 30 minutes ; n'envoie qu'après l'heure limite (B6), du lundi au vendredi, et seulement s'il y a de nouvelles lignes.
+- `surModification` : à chaque modification du Sheet (OK CDE, liaison CAI/Désignation).
+
+---
+
+## 6. Installation de zéro (pas à pas)
+
+1. **GitHub** : créer le dépôt `SP-Orders` (public) → ajouter `index.html`, `michelin-transparent.png` et les logos (Add file → Upload files) → Settings → Pages → Deploy from a branch → `main` / root. La page est alors en ligne.
+2. **Google Sheet** : créer un classeur vide.
+3. **Apps Script** : Extensions → Apps Script → effacer le code → coller tout `Code-Google-Apps-Script.txt` → enregistrer.
+4. Recharger le Sheet → menu **Commandes SP → 1. Installer** → accepter les autorisations Google (« Paramètres avancés » → continuer).
+5. Remplir : Reglages (B1, B2, B3, B6), Garages (nom, clé, atelier…), Clients, Catalogue.
+6. **Déployer** : Déployer → Nouveau déploiement → type *Application Web* → *Exécuter en tant que : Moi* → *Qui a accès : Tout le monde* → copier l'adresse `…/exec`.
+7. Dans `index.html` (sur GitHub, crayon), remplacer la valeur de `API_URL` par cette adresse. Valider (Commit).
+8. Tester avec le lien d'un garage (colonne `lien`). Mode test = `oui` pour essayer à toute heure, puis menu « Envoyer un email de test ».
+
+**Mettre à jour le script plus tard** : coller le nouveau code → enregistrer → relancer « Installer » → Déployer → *Gérer les déploiements* → crayon → *Version : Nouvelle version* → Déployer (l'adresse `/exec` ne change pas).
+**Mettre à jour la page** : remplacer `index.html` sur GitHub, puis Ctrl+Maj+R sur le navigateur.
+
+---
+
+## 7. Dépannage (problèmes déjà rencontrés)
+
+- **Liens des garages en `#ERROR!`** : formule de la colonne `lien` ; elle doit être `=Reglages!$B$3&"?k="&ENCODEURL(C2)` (relancer « Installer » la régénère).
+- **« Pas de connexion… »** : `API_URL` incorrecte ou vide dans `index.html`, ou Web App non republié, ou accès non réglé sur « Tout le monde », ou autorisations non accordées. Vérifier en ouvrant l'adresse `/exec` dans le navigateur.
+- **« Accès refusé, vérifiez votre lien »** : la clé du lien ne correspond pas exactement à la colonne `cle` (casse, espaces, caractères spéciaux), ou la clé existe pour deux garages, ou le script n'a pas été republié en « Nouvelle version » après modification.
+- **Pas d'email** : B1 vide ; autorisation d'envoi de mails non accordée (relancer « Installer ») ; pas de ligne nouvelle à envoyer ; l'heure limite n'est pas encore passée ; vérifier les spams. Tester avec « Envoyer un email de test ».
+- **Les listes CAI/Désignation ne remplissent rien** : le déclencheur `surModification` est absent → relancer « Installer » et accepter l'autorisation.
+- **Deux garages gardent l'ancienne apparence** : le navigateur garde l'ancienne page en cache (Ctrl+Maj+R) ou `index.html` n'a pas été remplacé sur GitHub.
+- **Logo qui ne s'affiche pas** : le fichier n'est pas dans le dépôt, le nom ne correspond pas exactement (majuscules), ou l'adresse n'est pas en `https://`.
+- **Quota Google** : l'envoi d'emails est limité par jour (compte Gmail gratuit : ~100 destinataires/jour) ; largement suffisant pour un récapitulatif quotidien.
+
+---
+
+## 8. Historique des demandes (ce qui a été construit, dans l'ordre)
+
+1. Cahier des charges d'origine (rôles, confidentialité, anti-doublon, lots, statuts, couleurs Michelin).
+2. Hébergement de la page sur GitHub Pages, depuis le navigateur uniquement (débutant).
+3. Abandon de Baserow au profit de Google Sheets + Apps Script (« le plus simple et le plus direct »).
+4. Correction des liens `#ERROR!` ; refonte de l'interface selon la maquette fournie.
+5. Avertissement de doublon uniquement si le même pneu est déjà dans le panier du jour pour le même lieu.
+6. Page d'historique / suivi des commandes ; passage en « Commandée » quand l'administrateur tape OK CDE.
+7. Logos : Michelin dans l'en-tête, logo par garage et par client (4× plus gros), en-tête tout bleu (un seul bandeau), logo Michelin transparent.
+8. Question sur les logos par garage : renseigner le nom de fichier dans la colonne `logo`.
+9. Email récapitulatif global confirmé ; mode test (saisie sans contrainte d'horaire) ; email de test ; clôture des garages à 17h30.
+10. Pas de nom de domaine payant : l'adresse GitHub Pages reste utilisée (alternative gratuite : renommer le dépôt).
+11. Clés et liens simplifiés : clé libre (sans limite de longueur), lien court `?k=`.
+12. Notification email à chaque ligne ajoutée (réglage B5, toujours active en mode test).
+13. Suivi réduit à deux filtres : « En attente » et « Commandée ».
+14. Quantité saisissable au clavier en plus des boutons − / +.
+15. Suppression de l'onglet **Lots** : tout dans Commandes avec les statuts En attente / OK CDE.
+16. Listes déroulantes CAI et Désignation dans Commandes (catalogue), liées l'une à l'autre, avec rappel de stock.
+17. Heure limite de commande réglable (Reglages B6) ; déclencheur toutes les 30 minutes.
+18. Références autorisées par client (colonne `references_autorisees` de l'onglet Clients).
+
+---
+
+## 9. Points à garder en tête
+
+- Rien ne se passe automatiquement sur BibServ : l'application prépare l'email, l'administrateur commande.
+- Changer le script ne suffit pas : il faut **republier une nouvelle version** du Web App.
+- Changer `index.html` ne suffit pas : il faut le remplacer sur GitHub et recharger sans cache.
+- La clé est le seul secret d'accès d'un garage : la changer dans le Sheet invalide immédiatement l'ancien lien.
+- Le mode test (B4) doit être remis sur `non` avant la mise en service réelle.
+- Le code a été vérifié avec des simulations (faux Google, navigateur de test) ; l'email et les déclencheurs réels dépendent du compte Google de l'administrateur et sont à confirmer lors du premier test (menu « Envoyer un email de test »).
