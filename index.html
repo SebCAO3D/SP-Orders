@@ -40,18 +40,18 @@
     text-align: center;
     font-weight: 700;
     font-size: 0.95rem;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 12px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 8px;
   }
   .idband {
-    background: #fff;
-    border-bottom: 1px solid var(--trait);
-    padding: 10px 14px;
+    background: var(--nuit);
+    border-bottom: 4px solid var(--jaune);
+    padding: 4px 14px 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
   }
-  .idband img { max-height: 40px; max-width: 45%; }
+  .idband img { max-height: 44px; max-width: 48%; background: #fff; border-radius: 8px; padding: 4px 10px; }
   .idpill {
     margin-left: auto;
     background: var(--action-clair);
@@ -75,23 +75,24 @@
     background: var(--carte);
     border: 2px solid var(--trait);
     border-radius: 12px;
-    padding: 12px 10px;
+    padding: 12px 6px;
     text-align: center;
     min-height: 132px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 4px;
   }
   .place.on { border-color: var(--action); background: var(--action-clair); }
   .place.on::after {
     content: "✓";
     position: absolute; top: 0; right: 0;
-    width: 34px; height: 34px;
+    width: 28px; height: 28px;
     background: var(--action); color: #fff;
-    border-radius: 0 9px 0 34px;
-    font-weight: 800; font-size: 0.9rem;
-    text-align: right; padding: 3px 8px 0 0;
+    border-radius: 0 9px 0 28px;
+    font-weight: 800; font-size: 0.8rem;
+    text-align: right; padding: 2px 6px 0 0;
   }
   .place-btn {
     width: 100%;
@@ -102,12 +103,13 @@
   }
   .place svg { width: 34px; height: 34px; stroke: var(--nuit); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .ico-slot { display: flex; align-items: center; justify-content: center; min-height: 38px; }
-  .place .logo { height: 38px; max-width: 62%; object-fit: contain; }
+  .place .logo { max-height: 150px; max-width: 100%; width: auto; height: auto; object-fit: contain; mix-blend-mode: multiply; }
+  .ico-slot.has-logo { margin-top: 14px; }
   .place .t { font-weight: 800; color: var(--nuit); }
   .place .s { font-size: 0.8rem; color: var(--discret); }
   .place select {
     width: 100%;
-    margin-top: auto;
+    margin-top: 8px;
     min-height: 40px;
     border: 0;
     border-radius: 8px;
@@ -364,12 +366,13 @@ function setIcon(slotId, logo) {
   const svg = slot.querySelector("svg");
   const old = slot.querySelector("img");
   if (old) old.remove();
+  slot.classList.remove("has-logo");
   if (!url) { svg.removeAttribute("hidden"); return; }
   const img = document.createElement("img");
   img.className = "logo";
   img.alt = "";
-  img.addEventListener("load", () => { svg.setAttribute("hidden", ""); });
-  img.addEventListener("error", () => { img.remove(); svg.removeAttribute("hidden"); });
+  img.addEventListener("load", () => { svg.setAttribute("hidden", ""); slot.classList.add("has-logo"); });
+  img.addEventListener("error", () => { img.remove(); slot.classList.remove("has-logo"); svg.removeAttribute("hidden"); });
   img.src = url;
   slot.append(img);
 }
@@ -722,7 +725,12 @@ function fatal(msg) {
 
 async function init() {
   $("title").textContent = TITRE;
-  if (LOGO_URL) { $("logo").src = LOGO_URL; $("logo").hidden = false; }
+  if (LOGO_URL) {
+    const lg = $("logo");
+    lg.addEventListener("load", () => { lg.hidden = false; });
+    lg.addEventListener("error", () => { lg.hidden = true; });
+    lg.src = LOGO_URL;
+  }
   if (API_URL.startsWith("COLLEZ")) {
     return fatal("Page non configurée : l'administrateur doit renseigner l'adresse de l'application Google dans index.html.");
   }
