@@ -295,7 +295,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxS-IIOAc7cFCJUTJnXH4sI969hwT3A0sMXY5Fbv4ikcpnJb_bM9pNmq-t3EPxaTV6B/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyD0j2RfHQyUN3ZWzV9D4zVOItoS0EHDRtSY3f5PYHNdBQ5_mwpnP1J6BrdsfPi8-c/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logo-michelin.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -737,7 +737,7 @@ async function init() {
   if (API_URL.startsWith("COLLEZ")) {
     return fatal("Page non configurée : l'administrateur doit renseigner l'adresse de l'application Google dans index.html.");
   }
-  if (!GARAGE || !KEY) {
+  if (!KEY) {
     return fatal("Lien incomplet. Utilisez le lien complet fourni par l'administrateur.");
   }
   try {
