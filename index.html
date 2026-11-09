@@ -224,6 +224,7 @@
 
 <main id="app" hidden>
   <div id="closed" class="banner closed" role="status" hidden><span class="ico">🕓</span><span id="closed-msg"></span></div>
+  <div id="testmode" class="banner closed" role="status" hidden><span class="ico">🧪</span><span>Mode test : saisie ouverte sans limite d'heure.</span></div>
   <div id="error" class="banner error" role="alert" hidden><span class="ico">⚠</span><span id="error-msg"></span></div>
 
   <!-- ===== Onglet Commander ===== -->
@@ -294,7 +295,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbyNacz27KTBv19KwLRsrLcTA_ktLL366rTwcB_c8dU4Cn8ofOZH0i0d0Ru7M8EFKU5k/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logo-michelin.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -306,7 +307,7 @@ const KEY = qs.get("k") || "";
 const $ = (id) => document.getElementById(id);
 const state = {
   cfg: null, orders: [], history: [], historyLoaded: false,
-  open: true, today: "",
+  open: true, test: false, today: "",
   tab: "order", mode: "atelier", qty: 1, filter: "all", busy: false,
 };
 
@@ -617,6 +618,7 @@ function emptyP(t) { const p = document.createElement("p"); p.className = "empty
 /* ---------- Rendu global ---------- */
 
 function renderAll() {
+  $("testmode").hidden = !state.test;
   const closed = !state.open;
   $("closed").hidden = !closed;
   if (closed) $("closed-msg").textContent = state.cfg.message || "Saisie fermée.";
@@ -660,7 +662,8 @@ async function refresh(silent) {
     state.orders = data.orders;
     state.today = data.today;
     state.open = data.open;
-    if (!data.open && !state.cfg.message) state.cfg.message = "Clôture de 16h30 passée. Réouverture au prochain jour ouvré.";
+    state.test = !!data.test;
+    if (!data.open && !state.cfg.message) state.cfg.message = "Clôture de 17h30 passée. Réouverture au prochain jour ouvré.";
     renderAll();
   } catch (e) {
     if (!silent) showError(e.message);
@@ -744,6 +747,7 @@ async function init() {
   }
   state.today = state.cfg.today;
   state.open = state.cfg.open;
+  state.test = !!state.cfg.test;
   $("g-name").textContent = state.cfg.garage.nom;
   document.title = `${state.cfg.garage.nom} – Commandes`;
   $("idband").hidden = false;
