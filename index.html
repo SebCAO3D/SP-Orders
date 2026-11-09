@@ -5,30 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#002f6c">
-<title>Commande de pneus – Service Point</title>
+<meta name="color-scheme" content="light">
+<title>Commandes – Service Point</title>
 <style>
   :root {
     --nuit: #002f6c;
     --jaune: #f8c200;
     --action: #0052cc;
-    --fond: #eef1f6;
+    --action-clair: #e6efff;
+    --fond: #f1f3f7;
     --carte: #ffffff;
     --texte: #14213d;
     --discret: #5b6678;
     --trait: #d5dbe6;
     --erreur: #c62828;
-    --erreur-fond: #fdecea;
     --ok: #1b7f3b;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fond: #0b1730;
-      --carte: #12244a;
-      --texte: #eef2fb;
-      --discret: #a9b6d0;
-      --trait: #2a3f6b;
-      --erreur-fond: #3a1a1c;
-    }
+    --alerte: #b26a00;
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -36,176 +28,271 @@
     margin: 0;
     background: var(--fond);
     color: var(--texte);
-    font: 17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-    padding-bottom: env(safe-area-inset-bottom, 0);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   }
-  header {
+  button, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  /* ---- En-tête ---- */
+  .topbar {
     background: var(--nuit);
     color: #fff;
-    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
-    border-bottom: 5px solid var(--jaune);
-  }
-  header h1 { margin: 0; font-size: 1.25rem; }
-  header p { margin: 2px 0 0; color: #c9d6ee; font-size: 0.9rem; }
-  main { max-width: 640px; margin: 0 auto; padding: 14px 14px 40px; }
-  .card {
-    background: var(--carte);
-    border: 1px solid var(--trait);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 14px;
-  }
-  h2 { margin: 0 0 10px; font-size: 1.05rem; }
-  label.field { display: block; font-weight: 600; margin: 14px 0 6px; }
-  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .seg.single { grid-template-columns: 1fr; }
-  button, select { font: inherit; }
-  .seg button {
-    min-height: 56px;
-    border: 2px solid var(--trait);
-    background: var(--carte);
-    color: var(--texte);
-    border-radius: 10px;
-    padding: 8px 10px;
-    font-weight: 600;
-  }
-  .seg button[aria-pressed="true"] {
-    border-color: var(--action);
-    background: var(--action);
-    color: #fff;
-  }
-  .lock { color: var(--discret); font-size: 0.9rem; margin-top: 6px; }
-  select {
-    width: 100%;
-    min-height: 54px;
-    border: 2px solid var(--trait);
-    border-radius: 10px;
-    background: var(--carte);
-    color: var(--texte);
-    padding: 0 10px;
-  }
-  .qty { display: flex; align-items: center; justify-content: center; gap: 14px; }
-  .qty button {
-    width: 72px; height: 72px;
-    border-radius: 50%;
-    border: 0;
-    background: var(--nuit);
-    color: var(--jaune);
-    font-size: 2.2rem;
+    text-align: center;
     font-weight: 700;
-    line-height: 1;
+    font-size: 0.95rem;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 12px;
   }
-  .qty output { min-width: 3ch; text-align: center; font-size: 2.6rem; font-weight: 800; }
-  .primary {
+  .idband {
+    background: #fff;
+    border-bottom: 1px solid var(--trait);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .idband img { max-height: 40px; max-width: 45%; }
+  .idpill {
+    margin-left: auto;
+    background: var(--action-clair);
+    border: 1px solid #b9cdf3;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+  .idpill b { font-weight: 800; }
+
+  main { max-width: 640px; margin: 0 auto; padding: 16px 14px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  h2 { margin: 18px 0 10px; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.01em; }
+  h2:first-child { margin-top: 4px; }
+
+  /* ---- Lieu de livraison ---- */
+  .places { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .places.single { grid-template-columns: 1fr; }
+  .place {
+    position: relative;
+    background: var(--carte);
+    border: 2px solid var(--trait);
+    border-radius: 12px;
+    padding: 12px 10px;
+    text-align: center;
+    min-height: 132px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .place.on { border-color: var(--action); background: var(--action-clair); }
+  .place.on::after {
+    content: "✓";
+    position: absolute; top: 0; right: 0;
+    width: 34px; height: 34px;
+    background: var(--action); color: #fff;
+    border-radius: 0 9px 0 34px;
+    font-weight: 800; font-size: 0.9rem;
+    text-align: right; padding: 3px 8px 0 0;
+  }
+  .place-btn {
     width: 100%;
-    min-height: 60px;
-    margin-top: 16px;
+    background: none; border: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 4px 0; min-height: 44px;
+    cursor: pointer;
+  }
+  .place svg { width: 34px; height: 34px; stroke: var(--nuit); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .place .t { font-weight: 800; color: var(--nuit); }
+  .place .s { font-size: 0.8rem; color: var(--discret); }
+  .place select {
+    width: 100%;
+    margin-top: auto;
+    min-height: 40px;
     border: 0;
-    border-radius: 10px;
-    background: var(--jaune);
-    color: var(--nuit);
-    font-size: 1.1rem;
-    font-weight: 800;
+    border-radius: 8px;
+    background: #e3e6ec;
+    padding: 0 8px;
+    font-size: 0.9rem;
   }
-  button:disabled { opacity: 0.4; }
-  button:focus-visible, select:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
-  .banner {
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    font-weight: 600;
+  .place.on select { background: #fff; border: 1px solid #b9cdf3; }
+
+  /* ---- Choix du pneu ---- */
+  .pick { position: relative; }
+  .pickbox {
+    background: var(--carte);
+    border: 2px solid var(--trait);
+    border-radius: 12px;
+    padding: 12px 40px 12px 14px;
+    min-height: 74px;
   }
-  .banner.error { background: var(--erreur-fond); color: var(--erreur); border: 2px solid var(--erreur); }
+  .pickbox .name { font-weight: 800; line-height: 1.3; }
+  .pickbox .placeholder { color: var(--discret); font-weight: 600; }
+  .pickbox .chev { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--discret); pointer-events: none; }
+  .pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+  .pick:focus-within .pickbox { outline: 3px solid var(--action); outline-offset: 2px; }
+  .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 0.85rem; }
+  .reco { background: #fff1b8; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
+  .stk { font-weight: 600; }
+  .stk::before { content: "● "; }
+  .stk.ok { color: var(--ok); }
+  .stk.faible { color: var(--alerte); }
+  .stk.rupture { color: var(--erreur); }
+
+  /* ---- Quantité ---- */
+  .qty { display: flex; justify-content: center; align-items: stretch; margin: 14px auto 0; width: 230px; max-width: 100%; }
+  .qty button {
+    width: 64px; height: 56px; border: 0;
+    background: var(--action); color: #fff;
+    font-size: 1.9rem; font-weight: 700; line-height: 1;
+    cursor: pointer;
+  }
+  .qty button:first-child { border-radius: 10px 0 0 10px; }
+  .qty button:last-child { border-radius: 0 10px 10px 0; }
+  .qty output {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: #fff; border-top: 2px solid var(--trait); border-bottom: 2px solid var(--trait);
+    font-size: 1.7rem; font-weight: 800;
+  }
+
+  /* ---- Bandeaux ---- */
+  .banner { border-radius: 8px; padding: 12px 14px; margin-top: 14px; font-weight: 600; display: flex; gap: 10px; align-items: flex-start; }
+  .banner.dup, .banner.error { background: #c62828; color: #fff; }
   .banner.closed { background: #fff6d6; color: #5c4600; border: 2px solid var(--jaune); }
-  @media (prefers-color-scheme: dark) { .banner.closed { background: #3a3000; color: #ffe27a; } }
-  .lieu-title { font-weight: 700; margin: 14px 0 6px; }
-  .lieu-title:first-of-type { margin-top: 0; }
-  .line {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 6px 10px;
-    padding: 10px 0;
-    border-top: 1px solid var(--trait);
+  .banner .ico { font-size: 1.1rem; line-height: 1.3; }
+
+  /* ---- Bouton ajouter ---- */
+  .add {
+    width: 100%; min-height: 58px; margin-top: 16px;
+    border: 0; border-radius: 30px;
+    background: var(--action); color: #fff;
+    font-size: 1rem; font-weight: 800; letter-spacing: 0.02em;
+    cursor: pointer;
   }
-  .line .name { font-weight: 600; }
+  .add:disabled { background: #9db6e3; cursor: not-allowed; }
+  .why { text-align: center; color: var(--discret); font-size: 0.9rem; margin: 8px 0 0; min-height: 1.3em; }
+
+  /* ---- Panier / lignes ---- */
+  .card { background: var(--carte); border: 1px solid var(--trait); border-radius: 12px; padding: 4px 14px; }
+  .lieu-title { font-weight: 800; color: var(--nuit); padding: 12px 0 2px; }
+  .line { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; padding: 10px 0; border-top: 1px solid var(--trait); align-items: center; }
+  .lieu-title + .line { border-top: 0; }
+  .line .name { font-weight: 700; }
   .line .meta { color: var(--discret); font-size: 0.85rem; }
   .mini { display: flex; align-items: center; gap: 6px; }
-  .mini button {
-    width: 44px; height: 44px;
-    border-radius: 8px;
-    border: 2px solid var(--trait);
-    background: var(--carte);
-    color: var(--texte);
-    font-size: 1.3rem;
-    font-weight: 700;
-  }
+  .mini button { width: 44px; height: 44px; border-radius: 8px; border: 2px solid var(--trait); background: #fff; font-size: 1.3rem; font-weight: 700; cursor: pointer; }
+  .mini button:disabled { opacity: 0.4; }
   .mini output { min-width: 2.2ch; text-align: center; font-weight: 800; font-size: 1.1rem; }
-  .mini .del { color: var(--erreur); border-color: var(--erreur); font-size: 1.1rem; margin-left: 4px; }
-  .empty { color: var(--discret); text-align: center; padding: 10px 0; }
-  .status { white-space: nowrap; font-size: 0.85rem; }
-  .fatal { padding: 40px 20px; text-align: center; }
-  [hidden] { display: none !important; }
+  .mini .del { color: var(--erreur); border-color: var(--erreur); font-size: 1.05rem; margin-left: 4px; }
+  .empty { color: var(--discret); text-align: center; padding: 16px 0; }
+
+  /* ---- Statuts ---- */
+  .badge { display: inline-block; white-space: nowrap; border-radius: 999px; padding: 3px 10px; font-size: 0.8rem; font-weight: 700; }
+  .badge.att { background: #fff1b8; color: #6b5200; }
+  .badge.tra { background: #ffe0c2; color: #8a4500; }
+  .badge.com { background: #d6f2de; color: #14612e; }
+  .qtyv { font-weight: 800; margin-right: 8px; }
+
+  /* ---- Suivi ---- */
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .chip { border: 2px solid var(--trait); background: #fff; border-radius: 999px; padding: 8px 14px; min-height: 44px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--nuit); border-color: var(--nuit); color: #fff; }
+  .day { font-weight: 800; margin: 18px 0 6px; }
+  .hint { color: var(--discret); font-size: 0.88rem; margin: 6px 0 0; }
+
+  /* ---- Navigation basse ---- */
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--trait); display: grid; grid-template-columns: 1fr 1fr; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  nav button { min-height: 58px; border: 0; background: none; font-weight: 700; color: var(--discret); cursor: pointer; border-top: 4px solid transparent; }
+  nav button[aria-selected="true"] { color: var(--nuit); border-top-color: var(--jaune); }
+
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+  .fatal { padding: 48px 20px; text-align: center; font-weight: 600; }
   @media (prefers-reduced-motion: no-preference) {
-    .banner { animation: pop 0.18s ease-out; }
-    @keyframes pop { from { transform: scale(0.98); opacity: 0.4; } }
+    .banner { animation: pop 0.16s ease-out; }
+    @keyframes pop { from { opacity: 0.3; transform: scale(0.98); } }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1 id="title">Commande de pneus</h1>
-  <p id="subtitle">Chargement…</p>
-</header>
+<div class="topbar" id="title">Commandes</div>
+<div class="idband" id="idband" hidden>
+  <img id="logo" alt="" hidden>
+  <div class="idpill">Atelier : <b id="g-name"></b><br>Date : <span id="g-date"></span></div>
+</div>
 
 <main id="app" hidden>
-  <div id="closed" class="banner closed" role="status" hidden></div>
-  <div id="error" class="banner error" role="alert" hidden></div>
+  <div id="closed" class="banner closed" role="status" hidden><span class="ico">🕓</span><span id="closed-msg"></span></div>
+  <div id="error" class="banner error" role="alert" hidden><span class="ico">⚠</span><span id="error-msg"></span></div>
 
-  <section class="card" aria-labelledby="h-new">
-    <h2 id="h-new">Nouvelle ligne</h2>
-
-    <label class="field" id="lbl-lieu">Livraison</label>
-    <div class="seg" id="seg-lieu" role="group" aria-labelledby="lbl-lieu">
-      <button type="button" id="b-atelier" aria-pressed="true">Mon atelier</button>
-      <button type="button" id="b-client" aria-pressed="false">Client utilisateur</button>
+  <!-- ===== Onglet Commander ===== -->
+  <section id="tab-order">
+    <h2 id="h-lieu">1. LIEU DE LIVRAISON</h2>
+    <div class="places" id="places" role="group" aria-labelledby="h-lieu">
+      <div class="place on" id="p-atelier">
+        <button type="button" class="place-btn" id="b-atelier" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>
+          <span class="t" id="a-title">Atelier garage (SP)</span>
+          <span class="s" id="a-sub"></span>
+        </button>
+      </div>
+      <div class="place" id="p-client">
+        <button type="button" class="place-btn" id="b-client" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg>
+          <span class="t">Client utilisateur</span>
+        </button>
+        <select id="sel-client" aria-label="Client utilisateur"></select>
+      </div>
     </div>
-    <div class="lock" id="atelier-info"></div>
 
-    <div id="client-wrap" hidden>
-      <label class="field" for="sel-client">Client</label>
-      <select id="sel-client"></select>
+    <h2 id="h-pneu">2. CHOIX DU PNEUMATIQUE</h2>
+    <div class="pick">
+      <div class="pickbox" aria-hidden="true">
+        <div class="name" id="pick-name"></div>
+        <div class="tags" id="pick-tags"></div>
+        <span class="chev">▾</span>
+      </div>
+      <select id="sel-cai" aria-labelledby="h-pneu"></select>
     </div>
 
-    <label class="field" for="sel-cai">Référence</label>
-    <select id="sel-cai"></select>
-
-    <label class="field" id="lbl-qty">Quantité</label>
-    <div class="qty" role="group" aria-labelledby="lbl-qty">
+    <div class="qty" role="group" aria-label="Quantité">
       <button type="button" id="q-minus" aria-label="Diminuer">−</button>
       <output id="q-val" aria-live="polite">1</output>
       <button type="button" id="q-plus" aria-label="Augmenter">+</button>
     </div>
 
-    <div id="dup" class="banner error" role="alert" hidden style="margin:16px 0 0">
-      Cette référence est déjà dans le panier pour ce lieu. Ajustez la quantité sur la ligne existante.
+    <div id="dup" class="banner dup" role="alert" hidden>
+      <span class="ico">⚠</span>
+      <span id="dup-msg"></span>
     </div>
 
-    <button type="button" class="primary" id="add">Ajouter au panier</button>
+    <button type="button" class="add" id="add">AJOUTER À LA COMMANDE</button>
+    <p class="why" id="why"></p>
+
+    <h2>PANIER DU <span id="today"></span></h2>
+    <div class="card" id="cart"></div>
   </section>
 
-  <section class="card" aria-labelledby="h-cart">
-    <h2 id="h-cart">Panier du <span id="today"></span></h2>
-    <div id="cart"></div>
+  <!-- ===== Onglet Suivi ===== -->
+  <section id="tab-track" hidden>
+    <h2>HISTORIQUE ET SUIVI</h2>
+    <div class="chips" id="chips" role="group" aria-label="Filtrer par statut"></div>
+    <p class="hint">60 derniers jours. « Commandée » s'affiche quand la commande a été passée sur BibServ.</p>
+    <div id="history"></div>
   </section>
 </main>
 
 <div id="fatal" class="fatal" hidden></div>
 
+<nav id="nav" hidden>
+  <button type="button" id="n-order" role="tab" aria-selected="true">Commander</button>
+  <button type="button" id="n-track" role="tab" aria-selected="false">Suivi</button>
+</nav>
+
 <script>
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxL5RP16o5kMdW0QeE_09-OVqhviuiuBuUt0aJcbzjyfFL8m9TjdWm2Em_dAsc33v8d/exec";
+const API_URL = "COLLEZ-ICI-L-ADRESSE-DE-VOTRE-APPLICATION-WEB-GOOGLE";
+const TITRE = "MICHELIN MS&S - Commandes";
+const LOGO_URL = ""; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
 
 const qs = new URLSearchParams(location.search);
@@ -214,25 +301,32 @@ const KEY = qs.get("k") || "";
 
 const $ = (id) => document.getElementById(id);
 const state = {
-  cfg: null,
-  orders: [],
-  open: true,
-  today: "",
-  mode: "atelier",   // "atelier" | "client"
-  qty: 1,
-  busy: false,
+  cfg: null, orders: [], history: [], historyLoaded: false,
+  open: true, today: "",
+  tab: "order", mode: "atelier", qty: 1, filter: "all", busy: false,
 };
 
-const STOCK_DOT = { ok: "🟢", faible: "🟠", rupture: "🔴" };
+const fr = (iso) => (iso || "").split("-").reverse().join("/");
+const frStamp = (s) => { const [d, t] = (s || "").split(" "); return fr(d) + (t ? " à " + t.replace(":", "h") : ""); };
+
+const STATUS = {
+  "En attente": { cls: "att", label: "🟡 En attente" },
+  "Transmise": { cls: "tra", label: "🟠 Transmise" },
+  "Commandée": { cls: "com", label: "🟢 Commandée" },
+};
+function badge(statut) {
+  const s = STATUS[statut] || { cls: "att", label: statut };
+  const b = document.createElement("span");
+  b.className = "badge " + s.cls;
+  b.textContent = s.label;
+  return b;
+}
 
 async function api(action, payload = {}) {
   let res;
   try {
     // Requête "simple" (sans en-tête personnalisé) : requise par Google Apps Script.
-    res = await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify({ action, garage: GARAGE, key: KEY, ...payload }),
-    });
+    res = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action, garage: GARAGE, key: KEY, ...payload }) });
   } catch {
     throw new Error("Pas de connexion. Vos lignes déjà ajoutées sont enregistrées ; réessayez dans un instant.");
   }
@@ -247,58 +341,96 @@ async function api(action, payload = {}) {
 }
 
 function showError(msg) {
-  const el = $("error");
-  el.textContent = msg || "";
-  el.hidden = !msg;
+  $("error-msg").textContent = msg || "";
+  $("error").hidden = !msg;
 }
 
+/* ---------- Données dérivées ---------- */
+
+function atelier() { return state.cfg.lieux.find((p) => p.id === "atelier"); }
+function clients() { return state.cfg.lieux.filter((p) => p.type === "client"); }
 function currentPlace() {
-  if (state.mode === "atelier") return state.cfg.lieux.find((p) => p.id === "atelier");
+  if (state.mode === "atelier") return atelier();
   return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
 }
+function currentItem() { return state.cfg.catalogue.find((c) => String(c.cai) === $("sel-cai").value); }
 
+/** Doublon = même CAI, même lieu (code tiers), même jour. Uniquement quand un pneu est choisi. */
 function isDuplicate() {
   const place = currentPlace();
-  const cai = $("sel-cai").value;
-  if (!place || !cai) return false;
+  const item = currentItem();
+  if (!place || !item) return false;
   return state.orders.some(
-    (o) => o.date === state.today && o.code_tiers === place.code_tiers && String(o.cai) === String(cai),
+    (o) => o.date === state.today && o.code_tiers === place.code_tiers && String(o.cai) === String(item.cai),
   );
 }
 
-function editable(o) {
-  return state.open && o.statut === "En attente" && o.date === state.today;
+function editable(o) { return state.open && o.statut === "En attente" && o.date === state.today; }
+
+/* ---------- Rendu : formulaire ---------- */
+
+function stockInfo(item) {
+  const label = item.stock_libelle ||
+    (item.stock === "rupture" ? "Rupture de stock" : item.stock === "faible" ? "Stock faible" : "En stock");
+  return { cls: ["ok", "faible", "rupture"].includes(item.stock) ? item.stock : "ok", label };
 }
 
-/* ---------- Rendu ---------- */
+function renderPick() {
+  const item = currentItem();
+  const name = $("pick-name");
+  const tags = $("pick-tags");
+  tags.replaceChildren();
+  name.classList.toggle("placeholder", !item);
+  if (!item) { name.textContent = "Choisir un pneu…"; return; }
+  name.textContent = `${item.designation} - CAI ${item.cai}`;
+  if (item.recommande) {
+    const r = document.createElement("span");
+    r.className = "reco";
+    r.textContent = "★ Recommandé";
+    tags.append(r);
+  }
+  const si = stockInfo(item);
+  const s = document.createElement("span");
+  s.className = "stk " + si.cls;
+  s.textContent = si.label;
+  tags.append(s);
+}
 
 function renderForm() {
-  const atelier = state.cfg.lieux.find((p) => p.id === "atelier");
-  const clients = state.cfg.lieux.filter((p) => p.type === "client");
-
-  $("b-client").hidden = clients.length === 0;
-  $("seg-lieu").classList.toggle("single", clients.length === 0);
+  const a = atelier();
+  const cl = clients();
+  $("p-client").hidden = cl.length === 0;
+  $("places").classList.toggle("single", cl.length === 0);
+  $("a-title").textContent = a.label;
+  $("a-sub").textContent = a.adresse || a.code_tiers;
+  $("p-atelier").classList.toggle("on", state.mode === "atelier");
+  $("p-client").classList.toggle("on", state.mode === "client");
   $("b-atelier").setAttribute("aria-pressed", String(state.mode === "atelier"));
   $("b-client").setAttribute("aria-pressed", String(state.mode === "client"));
-  $("client-wrap").hidden = state.mode !== "client";
-  $("atelier-info").textContent =
-    state.mode === "atelier" ? `Adresse verrouillée : ${atelier.label} (${atelier.code_tiers})` : "";
 
+  renderPick();
+  $("q-val").textContent = String(state.qty);
+
+  const item = currentItem();
   const dup = isDuplicate();
   $("dup").hidden = !dup;
-  $("add").disabled = state.busy || dup || !state.open || !$("sel-cai").value;
-  $("q-val").textContent = String(state.qty);
+  if (dup) {
+    $("dup-msg").textContent =
+      `Vous avez déjà commandé ce pneu (CAI ${item.cai}) aujourd'hui pour ce lieu. ` +
+      "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
+  }
+
+  $("add").disabled = state.busy || dup || !state.open || !item;
+  $("why").textContent = !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : "";
 }
 
 function buildSelects() {
   const selClient = $("sel-client");
   selClient.replaceChildren();
-  for (const p of state.cfg.lieux.filter((x) => x.type === "client")) {
-    selClient.append(new Option(p.label, p.id));
-  }
+  for (const p of clients()) selClient.append(new Option(p.label, p.id));
 
   const selCai = $("sel-cai");
-  selCai.replaceChildren();
+  selCai.replaceChildren(new Option("Choisir un pneu…", ""));
   const groups = new Map();
   for (const item of state.cfg.catalogue) {
     if (!groups.has(item.famille)) {
@@ -307,52 +439,61 @@ function buildSelects() {
       groups.set(item.famille, g);
       selCai.append(g);
     }
-    const dot = STOCK_DOT[item.stock] || "⚪";
-    const opt = new Option(`${dot} ${item.cai} – ${item.designation}`, item.cai);
+    const text = `${item.recommande ? "★ " : ""}${item.designation} – CAI ${item.cai}` + (item.stock === "rupture" ? " (rupture)" : "");
+    const opt = new Option(text, item.cai);
     if (item.stock === "rupture") opt.disabled = true;
     groups.get(item.famille).append(opt);
   }
-  const first = [...selCai.options].find((o) => !o.disabled);
-  if (first) selCai.value = first.value;
+  selCai.value = "";
 }
+
+/* ---------- Rendu : panier ---------- */
+
+function miniBtn(text, label, onClick, disabled, cls) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = text;
+  b.setAttribute("aria-label", label);
+  b.disabled = disabled || state.busy;
+  if (cls) b.className = cls;
+  b.addEventListener("click", onClick);
+  return b;
+}
+function out(n) { const o = document.createElement("output"); o.textContent = String(n); return o; }
 
 function renderCart() {
   const box = $("cart");
   box.replaceChildren();
-  $("today").textContent = state.today.split("-").reverse().join("/");
+  $("today").textContent = fr(state.today);
 
   if (state.orders.length === 0) {
     const p = document.createElement("p");
     p.className = "empty";
-    p.textContent = "Panier vide. Ajoutez une première référence ci-dessus.";
+    p.textContent = "Panier vide. Choisissez un pneu ci-dessus.";
     box.append(p);
     return;
   }
 
   const byPlace = new Map();
   for (const o of state.orders) {
-    const k = o.code_tiers;
-    if (!byPlace.has(k)) byPlace.set(k, { label: o.lieu, items: [] });
-    byPlace.get(k).items.push(o);
+    if (!byPlace.has(o.code_tiers)) byPlace.set(o.code_tiers, { label: o.lieu, items: [] });
+    byPlace.get(o.code_tiers).items.push(o);
   }
-
   for (const { label, items } of byPlace.values()) {
     const t = document.createElement("div");
     t.className = "lieu-title";
     t.textContent = label;
     box.append(t);
-
     for (const o of items) {
       const row = document.createElement("div");
       row.className = "line";
-
       const left = document.createElement("div");
       const name = document.createElement("div");
       name.className = "name";
       name.textContent = o.designation;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `CAI ${o.cai}` + (o.date !== state.today ? ` · du ${o.date.split("-").reverse().join("/")}` : "");
+      meta.textContent = `CAI ${o.cai}` + (o.date !== state.today ? ` · du ${fr(o.date)}` : "");
       left.append(name, meta);
 
       const right = document.createElement("div");
@@ -365,10 +506,10 @@ function renderCart() {
           miniBtn("✕", `Supprimer ${o.designation}`, () => removeLine(o), false, "del"),
         );
       } else {
-        const s = document.createElement("span");
-        s.className = "status";
-        s.textContent = `${o.statut === "Commandée" ? "🟢" : "🟡"} ${o.statut} · ×${o.quantite}`;
-        right.append(s);
+        const q = document.createElement("span");
+        q.className = "qtyv";
+        q.textContent = `×${o.quantite}`;
+        right.append(q, badge(o.statut));
       }
       row.append(left, right);
       box.append(row);
@@ -376,29 +517,86 @@ function renderCart() {
   }
 }
 
-function miniBtn(text, label, onClick, disabled, cls) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.textContent = text;
-  b.setAttribute("aria-label", label);
-  b.disabled = disabled || state.busy;
-  if (cls) b.className = cls;
-  b.addEventListener("click", onClick);
-  return b;
+/* ---------- Rendu : suivi ---------- */
+
+const FILTERS = [["all", "Tout"], ["En attente", "En attente"], ["Transmise", "Transmise"], ["Commandée", "Commandée"]];
+
+function renderChips() {
+  const box = $("chips");
+  box.replaceChildren();
+  for (const [key, label] of FILTERS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip";
+    b.textContent = label;
+    b.setAttribute("aria-pressed", String(state.filter === key));
+    b.addEventListener("click", () => { state.filter = key; renderChips(); renderHistory(); });
+    box.append(b);
+  }
 }
 
-function out(n) {
-  const o = document.createElement("output");
-  o.textContent = String(n);
-  return o;
+function renderHistory() {
+  const box = $("history");
+  box.replaceChildren();
+  const list = state.history.filter((o) => state.filter === "all" || o.statut === state.filter);
+  if (!state.historyLoaded) { box.append(emptyP("Chargement…")); return; }
+  if (list.length === 0) { box.append(emptyP("Aucune commande à afficher.")); return; }
+
+  const byDay = new Map();
+  for (const o of list) {
+    if (!byDay.has(o.date)) byDay.set(o.date, []);
+    byDay.get(o.date).push(o);
+  }
+  for (const [day, items] of byDay) {
+    const h = document.createElement("div");
+    h.className = "day";
+    h.textContent = day === state.today ? `Aujourd'hui · ${fr(day)}` : fr(day);
+    const card = document.createElement("div");
+    card.className = "card";
+    for (const o of items) {
+      const row = document.createElement("div");
+      row.className = "line";
+      const left = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = o.designation;
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `CAI ${o.cai} · ${o.lieu}` + (o.valide_le ? ` · commandée le ${frStamp(o.valide_le)}` : "");
+      left.append(name, meta);
+      const right = document.createElement("div");
+      const q = document.createElement("span");
+      q.className = "qtyv";
+      q.textContent = `×${o.quantite}`;
+      right.append(q, badge(o.statut));
+      row.append(left, right);
+      card.append(row);
+    }
+    box.append(h, card);
+  }
 }
+function emptyP(t) { const p = document.createElement("p"); p.className = "empty"; p.textContent = t; return p; }
+
+/* ---------- Rendu global ---------- */
 
 function renderAll() {
-  const closed = $("closed");
-  closed.textContent = state.open ? "" : state.cfg.message || "Saisie fermée.";
-  closed.hidden = state.open;
+  const closed = !state.open;
+  $("closed").hidden = !closed;
+  if (closed) $("closed-msg").textContent = state.cfg.message || "Saisie fermée.";
+  $("g-date").textContent = fr(state.today);
   renderForm();
   renderCart();
+  if (state.tab === "track") renderHistory();
+}
+
+function setTab(tab) {
+  state.tab = tab;
+  $("tab-order").hidden = tab !== "order";
+  $("tab-track").hidden = tab !== "track";
+  $("n-order").setAttribute("aria-selected", String(tab === "order"));
+  $("n-track").setAttribute("aria-selected", String(tab === "track"));
+  window.scrollTo(0, 0);
+  if (tab === "track") { renderChips(); renderHistory(); loadHistory(); }
 }
 
 /* ---------- Actions ---------- */
@@ -425,22 +623,39 @@ async function refresh(silent) {
     state.orders = data.orders;
     state.today = data.today;
     state.open = data.open;
-    if (state.cfg && !data.open && !state.cfg.message) {
-      state.cfg.message = "Clôture de 16h30 passée. Réouverture au prochain jour ouvré.";
-    }
+    if (!data.open && !state.cfg.message) state.cfg.message = "Clôture de 16h30 passée. Réouverture au prochain jour ouvré.";
     renderAll();
   } catch (e) {
     if (!silent) showError(e.message);
   }
 }
 
+async function loadHistory() {
+  try {
+    const data = await api("history");
+    state.history = data.orders;
+    state.historyLoaded = true;
+    if (state.tab === "track") renderHistory();
+  } catch (e) {
+    state.historyLoaded = true;
+    showError(e.message);
+    renderHistory();
+  }
+}
+
 function addLine() {
   return guarded(async () => {
     const place = currentPlace();
+    const item = currentItem();
     if (!place) throw new Error("Choisissez un lieu de livraison.");
-    const data = await api("add", { lieu_id: place.id, cai: $("sel-cai").value, quantite: state.qty });
+    if (!item) throw new Error("Choisissez un pneu.");
+    const data = await api("add", { lieu_id: place.id, cai: item.cai, quantite: state.qty });
     state.orders.unshift(data.order);
+    // Remise à zéro : le pneu qu'on vient d'ajouter n'est plus sélectionné,
+    // donc le bandeau de doublon n'apparaît que si on le rechoisit.
+    $("sel-cai").value = "";
     state.qty = 1;
+    state.historyLoaded = false;
   });
 }
 
@@ -448,6 +663,7 @@ function changeQty(order, q) {
   return guarded(async () => {
     const data = await api("update", { id: order.id, quantite: q });
     Object.assign(order, data.order);
+    state.historyLoaded = false;
   });
 }
 
@@ -456,6 +672,7 @@ function removeLine(order) {
   return guarded(async () => {
     await api("delete", { id: order.id });
     state.orders = state.orders.filter((o) => o.id !== order.id);
+    state.historyLoaded = false;
   });
 }
 
@@ -463,13 +680,15 @@ function removeLine(order) {
 
 function fatal(msg) {
   $("app").hidden = true;
+  $("nav").hidden = true;
   const f = $("fatal");
   f.hidden = false;
   f.textContent = msg;
-  $("subtitle").textContent = "";
 }
 
 async function init() {
+  $("title").textContent = TITRE;
+  if (LOGO_URL) { $("logo").src = LOGO_URL; $("logo").hidden = false; }
   if (API_URL.startsWith("COLLEZ")) {
     return fatal("Page non configurée : l'administrateur doit renseigner l'adresse de l'application Google dans index.html.");
   }
@@ -483,23 +702,30 @@ async function init() {
   }
   state.today = state.cfg.today;
   state.open = state.cfg.open;
-  $("title").textContent = state.cfg.garage.nom;
-  $("subtitle").textContent = "Réapprovisionnement · clôture à 16h30";
-  document.title = `${state.cfg.garage.nom} – Commande de pneus`;
+  $("g-name").textContent = state.cfg.garage.nom;
+  document.title = `${state.cfg.garage.nom} – Commandes`;
+  $("idband").hidden = false;
   buildSelects();
   $("app").hidden = false;
+  $("nav").hidden = false;
 
+  const pickClient = () => { state.mode = "client"; renderForm(); };
   $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; renderForm(); });
-  $("b-client").addEventListener("click", () => { state.mode = "client"; renderForm(); });
-  $("sel-client").addEventListener("change", renderForm);
+  $("b-client").addEventListener("click", pickClient);
+  $("sel-client").addEventListener("focus", pickClient);
+  $("sel-client").addEventListener("change", pickClient);
   $("sel-cai").addEventListener("change", renderForm);
   $("q-minus").addEventListener("click", () => { state.qty = Math.max(1, state.qty - 1); renderForm(); });
   $("q-plus").addEventListener("click", () => { state.qty = Math.min(999, state.qty + 1); renderForm(); });
   $("add").addEventListener("click", addLine);
+  $("n-order").addEventListener("click", () => setTab("order"));
+  $("n-track").addEventListener("click", () => setTab("track"));
 
   await refresh();
-  setInterval(() => refresh(true), 60000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(true); });
+  setInterval(() => { refresh(true); if (state.tab === "track") loadHistory(); }, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { refresh(true); if (state.tab === "track") loadHistory(); }
+  });
 }
 
 init();
