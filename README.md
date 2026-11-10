@@ -1,88 +1,46 @@
-# Commandes SP – réapprovisionnement Michelin
+# SP-Orders – Commandes Michelin Service Point
 
-Garages (SP) → `index.html` (GitHub Pages) → **passerelle Cloudflare Worker** → Baserow →
-GitHub Actions (16h30) → email à l'administrateur → saisie manuelle dans BibServ.
+Application web mobile pour les garages Service Point : ils saisissent leurs besoins de réassort de pneus,
+l'administrateur reçoit un **email récapitulatif** après l'heure limite et passe les commandes **à la main sur BibServ**.
+Aucune commande n'est passée automatiquement.
 
-## Pourquoi une passerelle (Worker) ?
+**Page des garages** : https://sebcao3d.github.io/SP-Orders/?k=CLE_DU_GARAGE
+(chaque garage a sa propre clé, indiquée dans l'onglet *Garages* du Google Sheet)
 
-GitHub Pages est statique : tout ce qui est dans `index.html` est lisible par les garages.
-Y mettre le token Baserow permettrait à n'importe quel mécanicien de lire **toutes** les
-commandes et **tous** les clients des autres garages. Le Worker (gratuit) garde le token
-côté serveur, impose la clé de chaque garage, ne renvoie que ses lieux et ses lignes,
-et refuse tout ce qui est hors périmètre (lieux, modifications, suppressions).
-Il applique aussi côté serveur : date du jour, anti-doublon, désignation, code tiers, cut-off.
+## Comment ça marche
 
-## Arborescence
+| Élément | Rôle |
+|---|---|
+| **GitHub Pages** (ce dépôt) | Affiche la page des garages (`index.html`) |
+| **Google Sheet** | Base de données : Commandes, Garages, Clients, Catalogue, Reglages |
+| **Google Apps Script** | « Serveur » : vérifications, email récapitulatif, déclencheurs |
 
-```
-index.html                      front garage (à publier sur GitHub Pages)
-worker/src/index.js             passerelle API (Cloudflare Workers)
-worker/wrangler.toml
-main.py + src/*.py              chaîne Python 3.11+ (Pydantic)
-.github/workflows/daily_orders.yml
-config/*.example.json           modèles de configuration (garages, catalogue)
-```
+Après l'heure limite (réglable dans l'onglet *Reglages*, case B6), un email regroupe les lignes « En attente ».
+Une fois commandé sur BibServ, l'administrateur choisit **OK CDE** dans la colonne *Statut* de l'onglet *Commandes* :
+le garage voit alors « Commandée » dans son suivi.
 
-## Mise en route (≈ 30 min)
+## Contenu du dépôt
 
-### 1. Baserow
-Créez une table **Commandes** avec ces champs (noms exacts) :
-`Date` (date, format ISO, sans heure) · `Garage` (texte) · `Lieu_Livraison` (texte) ·
-`Code_Tiers_Livre` (texte) · `Code_CAI` (texte) · `Designation` (texte) ·
-`Quantite` (nombre, 0 décimale) · `Statut` (choix unique : **En attente** / **Commandée**).
-Créez un *Database token* (Paramètres → Tokens API) avec droits création, lecture,
-modification et suppression sur cette table. Notez l'ID de la table (dans l'URL).
+| Fichier / dossier | À quoi il sert |
+|---|---|
+| `index.html` | La page des garages. **Doit rester à la racine** (c'est ce que GitHub Pages publie). |
+| `michelin-transparent.png` | Logo de l'en-tête. |
+| `logos/` | Logos des garages et des clients (Euromaster, Keolis, Transdev, bestdrive, firststop, lenormant, points…), appelés depuis les colonnes `logo` du Sheet sous la forme `logos/nom.png`. |
+| `sauvegarde/` | Copies de travail, sans effet sur le site : script Apps Script, récapitulatif complet, catalogue. |
 
-### 2. Configuration des garages et du catalogue
-Copiez `config/garages.example.json` → `config/garages.json` et
-`config/catalog.example.json` → `config/catalog.json`, puis adaptez-les.
-Générez une clé par garage : `openssl rand -hex 24`. Ces deux fichiers ne sont **jamais**
-commités (ils sont dans `.gitignore`) : ils vont dans les secrets du Worker.
-Stock du catalogue : `ok` 🟢, `faible` 🟠, `rupture` 🔴 (non commandable).
+## Mettre à jour l'application
 
-### 3. Déployer le Worker
-```bash
-cd worker
-npx wrangler login
-npx wrangler deploy                       # affiche l'URL https://commandes-sp.XXX.workers.dev
-npx wrangler secret put BASEROW_API_URL           # ex. https://api.baserow.io
-npx wrangler secret put BASEROW_TOKEN
-npx wrangler secret put BASEROW_ORDERS_TABLE_ID
-npx wrangler secret put ALLOWED_ORIGIN            # https://VOTRE-USER.github.io  (sans slash final)
-npx wrangler secret put GARAGES_JSON  < ../config/garages.json
-npx wrangler secret put CATALOG_JSON  < ../config/catalog.json
-```
-Après toute modification des JSON, relancez les deux dernières commandes.
+- **La page** : remplacer `index.html` ici (crayon ou *Add file → Upload files*), puis recharger avec Ctrl+Maj+R.
+- **Le script** : coller `sauvegarde/Code-Google-Apps-Script.txt` dans Apps Script, lancer *Commandes SP → 1. Installer*,
+  puis *Déployer → Gérer les déploiements → crayon → Nouvelle version*. L'adresse du script ne change pas.
+- Les deux fichiers fonctionnent ensemble : les mettre à jour tous les deux.
 
-### 4. Front garage
-Dans `index.html`, remplacez `API_URL` par l'URL du Worker. Poussez le dépôt sur GitHub,
-puis Settings → Pages → branche `main`, dossier racine. Lien à donner à chaque garage :
+## Reproduire l'application
 
-`https://VOTRE-USER.github.io/VOTRE-DEPOT/?garage=nord&k=LA_CLE_DU_GARAGE_NORD`
+Toute la marche à suivre (structure des onglets, règles, installation de zéro, dépannage) est dans
+`sauvegarde/RECAP-Application-Commandes-SP.md`.
 
-(le lien est personnel : chaque clé n'ouvre que son garage).
+## Sécurité
 
-### 5. GitHub Actions
-Settings → Secrets and variables → Actions :
-* **Secrets** : `BASEROW_API_URL`, `BASEROW_TOKEN`, `BASEROW_ORDERS_TABLE_ID`, `SMTP_HOST`
-  (`smtp.gmail.com`), `SMTP_PORT` (`587`), `SMTP_USER`, `SMTP_PASS`, `NOTIFICATION_EMAIL`.
-  Pour Gmail, `SMTP_PASS` est un **mot de passe d'application** (validation en 2 étapes requise).
-* **Variable** (onglet Variables) : `BIBSERV_URL` = adresse de votre espace BibServ.
-
-Test : onglet Actions → *Consolidation quotidienne* → Run workflow, case « force » cochée.
-
-## Points à connaître
-
-* **Heure d'été/hiver** : le cron GitHub est en UTC. Deux déclencheurs (14h30 et 15h30 UTC)
-  couvrent les deux saisons ; `main.py` ignore celui qui tombe avant 16h30 à Paris, et le
-  second passage ne fait rien s'il n'y a plus de ligne « En attente ».
-* **Retard possible** : GitHub peut retarder un cron de plusieurs minutes aux heures de pointe.
-  L'email de 16h32 n'est donc pas garanti à la minute près.
-* **Après 16h30 et le week-end** : la saisie est refusée (cohérent avec « date infalsifiable »
-  et « modifiable jusqu'à 16h29 »). Si une exécution est manquée, les lignes restent « En attente »
-  et sont reprises à l'exécution suivante.
-* **Email avant statut** : l'email part d'abord, puis les lignes passent en « Commandée ».
-  Si l'envoi échoue, rien n'est perdu ; si le passage de statut échouait après l'envoi, un
-  doublon d'email serait possible (préférable à une commande oubliée).
-* **Ajouter un garage / client** : éditez `garages.json`, relancez `wrangler secret put GARAGES_JSON`.
-* **Révoquer un accès** : changez la clé du garage dans `garages.json` et redéployez le secret.
+- Ce dépôt est **public** : n'y déposez jamais de clés de garages, de données clients ni de copie du Google Sheet.
+- La clé d'un garage est son seul accès : la modifier dans l'onglet *Garages* invalide l'ancien lien.
