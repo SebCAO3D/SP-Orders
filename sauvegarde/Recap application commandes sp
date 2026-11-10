@@ -5,8 +5,7 @@ Il décrit l'architecture, la structure du Google Sheet, les règles de fonction
 
 **À conserver avec ce document sur GitHub (ce sont les sources, ce récapitulatif ne les remplace pas) :**
 - `index.html` : la page des garages (hébergée par GitHub Pages, reste à la racine du dépôt)
-- `michelin-transparent.png` : logo de l'en-tête (à la racine)
-- `logos/` : logos des garages et des clients
+- `logos/` : logos des garages et des clients, et `logos/michelin-transparent.png` (logo de l'en-tête)
 - `sauvegarde/Code-Google-Apps-Script.txt` : le script à coller dans Apps Script (dernière version)
 - `sauvegarde/` : ce récapitulatif et les fichiers de catalogue (CSV)
 
@@ -48,9 +47,8 @@ Historique de décision : une première architecture avec Baserow + Cloudflare W
 ```
 SP-Orders/
 ├── index.html                  ← à la racine (c'est ce que GitHub Pages publie)
-├── michelin-transparent.png    ← à la racine
 ├── README.md
-├── logos/                      ← logos des garages et clients
+├── logos/                      ← logos des garages et clients + michelin-transparent.png
 └── sauvegarde/                 ← sans effet sur le site
     ├── Code-Google-Apps-Script.txt
     ├── RECAP-Application-Commandes-SP.md
@@ -156,7 +154,7 @@ Colonnes : `cai | designation | famille | recommande`
 
 ## 6. Installation de zéro (pas à pas)
 
-1. **GitHub** : créer le dépôt `SP-Orders` (public) → ajouter `index.html`, `michelin-transparent.png` et le dossier `logos/` (Add file → Upload files) → Settings → Pages → Deploy from a branch → `main` / root. La page est alors en ligne.
+1. **GitHub** : créer le dépôt `SP-Orders` (public) → ajouter `index.html` et le dossier `logos/` (avec `michelin-transparent.png` dedans) (Add file → Upload files) → Settings → Pages → Deploy from a branch → `main` / root. La page est alors en ligne.
 2. **Google Sheet** : créer un classeur vide.
 3. **Apps Script** : Extensions → Apps Script → effacer le code → coller tout `Code-Google-Apps-Script.txt` → enregistrer.
 4. Recharger le Sheet → menu **Commandes SP → 1. Installer** → accepter les autorisations Google (« Paramètres avancés » → continuer).
