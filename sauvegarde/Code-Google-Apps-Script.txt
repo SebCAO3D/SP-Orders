@@ -113,20 +113,20 @@ function cutoffLabel_() {
 function orderingState_() {
   const n = parisNow_();
   if (isTestMode_()) {
-    return { open: true, today: n.date, message: '', test: true };
+    return { open: true, today: n.date, message: '', notice: '', test: true };
   }
-  if (n.dow > 5) {
-    return { open: false, today: n.date, message: 'Saisie fermée le week-end. Réouverture lundi.', test: false };
+  // La saisie est TOUJOURS possible. Avant la clôture d'un jour ouvré, la commande est pour aujourd'hui.
+  // Après la clôture (ou le week-end), elle est datée du prochain jour ouvré : elle ne partira par email
+  // qu'à la clôture de ce jour-là (consoliderAuto n'envoie que les lignes dont la date est <= aujourd'hui).
+  if (n.dow <= 5 && n.minutes < cutoffMinutes_()) {
+    return { open: true, today: n.date, message: '', notice: '', test: false };
   }
-  if (n.minutes >= cutoffMinutes_()) {
-    return {
-      open: false,
-      today: n.date,
-      message: 'Clôture de ' + cutoffLabel_() + ' passée : les commandes du jour sont parties. Réouverture au prochain jour ouvré.',
-      test: false
-    };
-  }
-  return { open: true, today: n.date, message: '', test: false };
+  let day = n.date, dow = n.dow;
+  if (n.dow <= 5) { day = addDays_(day, 1); dow = dow + 1; }   // après la clôture : lendemain
+  while (dow > 5) { day = addDays_(day, 1); dow = dow === 7 ? 1 : dow + 1; }   // saute le week-end
+  const notice = 'Clôture de ' + cutoffLabel_() + ' passée : vos commandes sont enregistrées pour le ' +
+    day.slice(8, 10) + '/' + day.slice(5, 7) + ' et ne seront transmises qu\'à la clôture de ' + cutoffLabel_() + ' ce jour-là.';
+  return { open: true, today: day, message: '', notice: notice, test: false };
 }
 
 /* ===================== Accès garage ===================== */
@@ -372,6 +372,7 @@ function handleRequest_(body) {
         open: state.open,
         test: !!state.test,
         message: state.message,
+        notice: state.notice,
         orders: garageRows_(garageId, state.today).map(toOrder_)   // évite un second aller-retour au chargement
       };
 
@@ -380,6 +381,7 @@ function handleRequest_(body) {
         today: state.today,
         open: state.open,
         test: !!state.test,
+        notice: state.notice,
         orders: garageRows_(garageId, state.today).map(toOrder_)
       };
 

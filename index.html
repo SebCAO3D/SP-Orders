@@ -223,6 +223,7 @@
 
 <main id="app" hidden>
   <div id="closed" class="banner closed" role="status" hidden><span class="ico">🕓</span><span id="closed-msg"></span></div>
+  <div id="notice" class="banner closed" role="status" hidden><span class="ico">🕓</span><span id="notice-msg"></span></div>
   <div id="testmode" class="banner closed" role="status" hidden><span class="ico">🧪</span><span>Mode test : saisie ouverte sans limite d'heure.</span></div>
   <div id="error" class="banner error" role="alert" hidden><span class="ico">⚠</span><span id="error-msg"></span></div>
 
@@ -300,7 +301,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxZClSrcoqosnWntqhktGCUI0rVUBL3_oMLMoScwFV4Mc5Owtq7jbERk9OZHyNP32ir/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -313,7 +314,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   cfg: null, orders: [], history: [], historyLoaded: false,
   open: true, test: false, today: "",
-  tab: "order", mode: "", qty: 1, filter: "En attente", busy: false, loading: false,
+  tab: "order", mode: "", notice: "", qty: 1, filter: "En attente", busy: false, loading: false,
 };
 
 const fr = (iso) => (iso || "").split("-").reverse().join("/");
@@ -770,6 +771,8 @@ function renderAll() {
   const closed = !state.open && !state.loading;
   $("closed").hidden = !closed;
   if (closed) $("closed-msg").textContent = state.cfg.message || "Saisie fermée.";
+  $("notice").hidden = !state.notice || state.loading || closed;
+  if (state.notice) $("notice-msg").textContent = state.notice;
   $("g-date").textContent = fr(state.today);
   renderForm();
   renderCart();
@@ -810,6 +813,7 @@ async function refresh(silent) {
     state.orders = data.orders;
     state.today = data.today;
     state.open = data.open;
+    state.notice = data.notice || "";
     state.test = !!data.test;
     if (!data.open && !state.cfg.message) state.cfg.message = "Clôture passée. Réouverture au prochain jour ouvré.";
     renderAll();
@@ -931,6 +935,7 @@ async function init() {
   state.cfg = fresh;
   state.today = fresh.today;
   state.open = fresh.open;
+  state.notice = fresh.notice || "";
   state.test = !!fresh.test;
   state.loading = false;
   if (Array.isArray(fresh.orders)) state.orders = fresh.orders;

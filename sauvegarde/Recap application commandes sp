@@ -222,3 +222,8 @@ Les deux fichiers (page et script) vont ensemble : toujours mettre les deux à j
 - La clé est le seul secret d'accès d'un garage : la changer dans le Sheet invalide immédiatement l'ancien lien.
 - Le mode test (B4) doit être remis sur `non` avant la mise en service réelle.
 - Le code a été vérifié avec des simulations (faux Google, navigateur de test) ; l'email et les déclencheurs réels dépendent du compte Google de l'administrateur et sont à confirmer lors du premier test (menu « Envoyer un email de test »).
+
+
+## Commande après la clôture (17h30)
+
+La saisie reste ouverte en permanence. Après la clôture (ou le week-end), une commande est enregistrée avec la date du **prochain jour ouvré** : elle n'est donc envoyée par email qu'à la clôture de ce jour-là. Le garage voit un bandeau d'information. Le mode test garde son comportement (tout est daté d'aujourd'hui).
