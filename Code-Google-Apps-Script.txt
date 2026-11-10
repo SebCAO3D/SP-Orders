@@ -147,7 +147,7 @@ function places_(g, garageId) {
     logo: norm_(g.logo)
   }];
   table_('Clients').forEach(function (c) {
-    if (norm_(c.garage).toLowerCase() === garageId && norm_(c.id) && norm_(c.code_tiers)) {
+    if (norm_(c.garage).toLowerCase() === garageId && norm_(c.id)) {   // le code tiers est facultatif
       places.push({
         id: norm_(c.id), type: 'client', label: norm_(c.nom) || norm_(c.id), code_tiers: norm_(c.code_tiers),
         adresse: norm_(c.adresse), logo: norm_(c.logo),
@@ -298,7 +298,7 @@ function notifyAdd_(g, place, item, qty, state) {
     const when = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
     const lines = [
       'Garage : ' + norm_(g.nom),
-      'Livraison : ' + place.label + ' (' + place.code_tiers + ')',
+      'Livraison : ' + place.label + (place.code_tiers ? ' (' + place.code_tiers + ')' : ''),
       'Pneu : ' + item.designation + (item.cai ? ' – CAI ' + item.cai : ''),
       'Quantité : ' + qty,
       'Saisie le : ' + frStamp_(when)
@@ -388,7 +388,7 @@ function handle_(body) {
         // Anti-doublon : Date + Garage + Tiers livré + CAI (vérifié côté serveur).
         const dup = garageRows_(garageId, state.today).filter(function (r) {
           return asDate_(r.Date) === state.today &&
-            norm_(r.Code_Tiers_Livre) === place.code_tiers &&
+            (norm_(r.Code_Tiers_Livre) || norm_(r.Lieu_Livraison)) === (place.code_tiers || place.label) &&
             (norm_(r.Code_CAI) || norm_(r.Designation)) === item.ref;
         })[0];
         if (dup) {
@@ -460,7 +460,7 @@ function doGet() {
 function buildLots_(rows) {
   const byTiers = {};
   rows.forEach(function (r) {
-    const k = norm_(r.Code_Tiers_Livre);
+    const k = norm_(r.Code_Tiers_Livre) || norm_(r.Lieu_Livraison);   // sans code tiers : regroupé par nom de lieu
     (byTiers[k] = byTiers[k] || []).push(r);
   });
   return Object.keys(byTiers).sort().map(function (tiers) {
@@ -480,7 +480,7 @@ function buildLots_(rows) {
       return { cai: cai === names[cai] ? '' : cai, designation: names[cai], quantite: qty[cai] };
     });
     return {
-      code_tiers: tiers,
+      code_tiers: norm_(group[0].Code_Tiers_Livre),
       lieu: norm_(group[0].Lieu_Livraison),
       adresses: Object.keys(adr),
       garages: Object.keys(garages).sort(),
@@ -508,7 +508,7 @@ function emailHtml_(lots, day, bibserv) {
     }).join('');
     return '<div style="margin:0 0 22px">' +
       '<div style="background:#002f6c;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0">' +
-      '<strong>' + esc_(lot.code_tiers) + '</strong> – ' + esc_(lot.lieu) +
+      (lot.code_tiers ? '<strong>' + esc_(lot.code_tiers) + '</strong> – ' : '<strong>') + esc_(lot.lieu) + (lot.code_tiers ? '' : '</strong>') +
       '<span style="float:right;color:#f8c200">' + lot.total + ' pneu(s)</span>' +
       ((lot.adresses || []).length ? '<div style="font-size:12px;margin-top:4px">Livraison : ' + (lot.adresses || []).map(esc_).join(' / ') + '</div>' : '') +
       '</div>' +
@@ -536,7 +536,7 @@ function emailHtml_(lots, day, bibserv) {
 function emailText_(lots, day) {
   const out = ['Commandes du ' + frDate_(day), ''];
   lots.forEach(function (lot) {
-    out.push(lot.code_tiers + ' - ' + lot.lieu + ' (' + lot.total + ' pneu(s))');
+    out.push((lot.code_tiers ? lot.code_tiers + ' - ' : '') + lot.lieu + ' (' + lot.total + ' pneu(s))');
     if ((lot.adresses || []).length) out.push('  Livraison : ' + lot.adresses.join(' / '));
     lot.lignes.forEach(function (l) { out.push('  ' + (l.cai ? l.cai + '  ' : '') + l.designation + '  x' + l.quantite); });
     out.push('');
@@ -776,6 +776,15 @@ function ensureSheet_(name, header, sample) {
   return { sheet: sh, created: created };
 }
 
+/** Met en format texte les colonnes citées par leur nom (celles qui existent). */
+function textCols_(sh, names) {
+  const head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
+  names.forEach(function (n) {
+    const i = head.indexOf(n);
+    if (i >= 0) sh.getRange(1, i + 1, 1000, 1).setNumberFormat('@');
+  });
+}
+
 function ensureColumns_(sh, header) {
   const lastCol = Math.max(sh.getLastColumn(), 1);
   const row = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
@@ -853,22 +862,24 @@ function installer() {
   cmd.hideColumns(colOf_(cmd, 'Envoye'));
 
   const G_HEAD = ['id', 'nom', 'cle', 'atelier_libelle', 'atelier_code_tiers', 'lien', 'atelier_adresse', 'logo'];
+  // Le code tiers est facultatif : présent à la création de l'onglet, mais jamais recréé si vous supprimez la colonne.
+  const G_REQUIRED = G_HEAD.filter(function (h) { return h !== 'atelier_code_tiers'; });
   const g = ensureSheet_('Garages', G_HEAD, [
     ['nord', 'Garage Nord', randomKey_(), 'Atelier Garage (SP)', 'TL-10001', '', 'ZI Ouest, Amiens'],
     ['sud', 'Garage Sud', randomKey_(), 'Atelier Garage (SP)', 'TL-10002', '', 'ZI Sud, Marseille']
   ]);
-  ensureColumns_(g.sheet, G_HEAD);
-  g.sheet.getRange('A:E').setNumberFormat('@');
-  g.sheet.getRange('G:G').setNumberFormat('@');
+  ensureColumns_(g.sheet, G_REQUIRED);
+  textCols_(g.sheet, ['id', 'nom', 'cle', 'atelier_libelle', 'atelier_code_tiers', 'atelier_adresse', 'logo']);
 
   const C_HEAD = ['garage', 'id', 'nom', 'code_tiers', 'adresse', 'logo', 'references_autorisees'];
+  const C_REQUIRED = C_HEAD.filter(function (h) { return h !== 'code_tiers'; });
   const c = ensureSheet_('Clients', C_HEAD, [
     ['nord', 'transports-dupont', 'Transports Dupont', 'TL-98421', 'Amiens'],
     ['nord', 'martin-logistique', 'Martin Logistique', 'TL-98422', 'Albert'],
     ['sud', 'sud-express', 'Sud Express', 'TL-98530', 'Marseille']
   ]);
-  ensureColumns_(c.sheet, C_HEAD);
-  c.sheet.getRange('A:G').setNumberFormat('@');
+  ensureColumns_(c.sheet, C_REQUIRED);
+  textCols_(c.sheet, C_HEAD);
 
   const K_HEAD = ['cai', 'designation', 'famille', 'recommande'];
   const cat = ensureSheet_('Catalogue', K_HEAD, [
