@@ -229,16 +229,9 @@
 
   <!-- ===== Onglet Commander ===== -->
   <section id="tab-order">
-    <h2 id="h-lieu">1. LIEU DE LIVRAISON</h2>
-    <div class="places" id="places" role="group" aria-labelledby="h-lieu">
-      <div class="place on" id="p-atelier">
-        <button type="button" class="place-btn" id="b-atelier" aria-pressed="true">
-          <span class="ico-slot" id="ico-atelier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M8 13h8M8 16h8M8 19h8"/></svg></span>
-          <span class="t" id="a-title">Atelier garage (SP)</span>
-          <span class="s" id="a-sub"></span>
-        </button>
-      </div>
-      <div class="place" id="p-client">
+    <h2 id="h-lieu">1. CLIENT UTILISATEUR</h2>
+    <div class="places single" id="places" role="group" aria-labelledby="h-lieu">
+      <div class="place on" id="p-client">
         <button type="button" class="place-btn" id="b-client" aria-pressed="false">
           <span class="ico-slot" id="ico-client"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></span>
           <span class="t" id="c-title">Client utilisateur</span>
@@ -390,10 +383,8 @@ function clientLogo() {
   return c ? c.logo : "";
 }
 
-function atelier() { return state.cfg.lieux.find((p) => p.id === "atelier"); }
 function clients() { return state.cfg.lieux.filter((p) => p.type === "client"); }
 function currentPlace() {
-  if (state.mode === "atelier") return undefined;   // l'atelier (garage) ne permet aucun choix de pneu : seuls les clients commandent
   return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
 }
 function currentItem() { return state.cfg.catalogue.find((c) => String(c.ref) === $("sel-cai").value); }
@@ -439,22 +430,14 @@ function renderPick() {
 }
 
 function renderForm() {
-  const a = atelier();
   const cl = clients();
   $("p-client").hidden = cl.length === 0;
-  $("places").classList.toggle("single", cl.length === 0);
-  $("a-title").textContent = a.label;
-  $("a-sub").textContent = a.adresse || a.code_tiers;
-  setIcon("ico-atelier", a.logo || state.cfg.garage.logo);
   setIcon("ico-client", clientLogo());
   // Le lieu de livraison affiché est le nom du client sélectionné (c'est aussi ce qui est enregistré et envoyé par email).
-  const cur = state.mode === "client" ? clients().find((x) => x.id === $("sel-client").value) : null;
+  const cur = clients().find((x) => x.id === $("sel-client").value);
   $("c-title").textContent = cur ? cur.label : "Client utilisateur";
   $("c-sub").textContent = cur ? (cur.adresse || cur.code_tiers) : "";
-  $("p-atelier").classList.toggle("on", state.mode === "atelier");
-  $("p-client").classList.toggle("on", state.mode === "client");
-  $("b-atelier").setAttribute("aria-pressed", String(state.mode === "atelier"));
-  $("b-client").setAttribute("aria-pressed", String(state.mode === "client"));
+  $("b-client").setAttribute("aria-pressed", String(!!cur));
 
   renderPick();
   const qi = $("q-val");
@@ -472,17 +455,17 @@ function renderForm() {
   const noPlace = !currentPlace();
   $("pickbox").classList.toggle("off", noPlace);
   $("add").disabled = state.busy || state.loading || dup || !state.open || noPlace || !item || state.qty < 1;
-  $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? (state.mode === "atelier" ? "Commande possible uniquement pour un client" : state.mode === "client" ? "Choisissez un client" : "Choisissez d'abord un client") : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
+  $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? "Choisissez un client" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
   const selClient = $("sel-client");
   const prev = selClient.value;
   selClient.replaceChildren();
-  // Rien n'est présélectionné : le garage doit choisir un client (ou l'atelier) avant de choisir le pneu.
+  // Plusieurs clients : rien n'est présélectionné (le garage choisit). Un seul client : il est sélectionné d'office.
   selClient.append(new Option("Choisir un client…", ""));
   for (const p of clients()) selClient.append(new Option(p.label, p.id));
-  selClient.value = clients().some((p) => p.id === prev) ? prev : "";
+  selClient.value = clients().some((p) => p.id === prev) ? prev : clients().length === 1 ? clients()[0].id : "";
 
   buildCai();
 }
@@ -510,7 +493,7 @@ function renderPanel() {
     const n = document.createElement("div");
     n.className = "none";
     n.textContent = !currentPlace()
-      ? (state.mode === "atelier" ? "Le choix d'un pneu se fait uniquement via un client." : "Choisissez d'abord un client.")
+      ? "Choisissez d'abord un client."
       : `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
     list.append(n);
     return;
@@ -945,7 +928,6 @@ async function init() {
   $("nav").hidden = false;
 
   const pickClient = () => { state.mode = "client"; buildCai(); renderForm(); };
-  $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; buildCai(); renderForm(); });
   $("b-client").addEventListener("click", pickClient);
   $("sel-client").addEventListener("change", pickClient);
   $("sel-cai").addEventListener("change", () => { state.pickRef = $("sel-cai").value; renderForm(); });

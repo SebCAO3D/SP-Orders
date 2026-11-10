@@ -16,7 +16,7 @@ Aucune commande n'est passée automatiquement.
 | **Google Apps Script** | « Serveur » : vérifications, email récapitulatif, déclencheurs |
 
 Après l'heure limite (réglable dans l'onglet *Reglages*, case B6), un email regroupe les lignes « En attente ».
-Les garages commandent **uniquement via un client** (onglet *Clients*) : la carte du garage lui-même ne permet pas de choisir un pneu.
+Les garages commandent **uniquement via un client** (onglet *Clients*) : le garage lui-même n'apparaît plus comme lieu de livraison.
 Une fois commandé sur BibServ, l'administrateur choisit **OK CDE** dans la colonne *Statut* de l'onglet *Commandes* :
 le garage voit alors « Commandée » dans son suivi.
 
