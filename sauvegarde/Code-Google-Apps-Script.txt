@@ -33,7 +33,18 @@ function err_(status, message) {
   return e;
 }
 
+/** Pendant une requête de la page, les onglets en lecture seule ne sont lus qu'une fois (gain de temps). */
+let MEMO_ = null;
+const MEMO_TABLES_ = { Garages: true, Clients: true, Catalogue: true };
+
 function table_(name) {
+  if (MEMO_ && MEMO_TABLES_[name] && MEMO_[name]) return MEMO_[name];
+  const rows = readTable_(name);
+  if (MEMO_ && MEMO_TABLES_[name]) MEMO_[name] = rows;
+  return rows;
+}
+
+function readTable_(name) {
   const sh = ss_().getSheetByName(name);
   if (!sh) throw new Error('Onglet manquant : ' + name + '. Lancez « Installer » dans le menu Commandes SP.');
   const values = sh.getDataRange().getValues();
@@ -335,11 +346,21 @@ function withLock_(fn) {
 /* ===================== API (appelée par index.html) ===================== */
 
 function handle_(body) {
+  MEMO_ = {};
+  try {
+    return handleRequest_(body);
+  } finally {
+    MEMO_ = null;
+  }
+}
+
+function handleRequest_(body) {
   const key = String(body.key || '').trim();
   const g = authenticate_(norm_(body.garage).toLowerCase(), key);
   const garageId = norm_(g.id).toLowerCase();
   const state = orderingState_();
-  const places = places_(g, garageId);
+  // Les lieux ne servent qu'à la configuration et à l'ajout : inutile de lire l'onglet Clients à chaque rafraîchissement.
+  const places = (body.action === 'config' || body.action === 'add') ? places_(g, garageId) : null;
 
   switch (body.action) {
     case 'config':
@@ -350,7 +371,8 @@ function handle_(body) {
         today: state.today,
         open: state.open,
         test: !!state.test,
-        message: state.message
+        message: state.message,
+        orders: garageRows_(garageId, state.today).map(toOrder_)   // évite un second aller-retour au chargement
       };
 
     case 'orders':
@@ -375,7 +397,7 @@ function handle_(body) {
     case 'add': {
       if (!state.open) throw err_(409, state.message);
       const place = places.filter(function (p) { return p.id === norm_(body.lieu_id); })[0];
-      if (!place) throw err_(400, 'Lieu de livraison non autorisé.');
+      if (!place || place.type === 'atelier') throw err_(400, 'Lieu de livraison non autorisé : choisissez un client.');
       const wanted = norm_(body.ref !== undefined ? body.ref : body.cai);
       const item = catalog_().filter(function (c) { return c.ref === wanted; })[0];
       if (!item) throw err_(400, 'Code CAI inconnu.');
