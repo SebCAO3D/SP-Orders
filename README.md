@@ -24,8 +24,7 @@ le garage voit alors « Commandée » dans son suivi.
 | Fichier / dossier | À quoi il sert |
 |---|---|
 | `index.html` | La page des garages. **Doit rester à la racine** (c'est ce que GitHub Pages publie). |
-| `michelin-transparent.png` | Logo de l'en-tête. |
-| `logos/` | Logos des garages et des clients (Euromaster, Keolis, Transdev, bestdrive, firststop, lenormant, points…), appelés depuis les colonnes `logo` du Sheet sous la forme `logos/nom.png`. |
+| `logos/` | Logo de l'en-tête (`michelin-transparent.png`) et logos des garages et des clients (Euromaster, Keolis, Transdev, bestdrive, firststop, lenormant, points…), appelés depuis les colonnes `logo` du Sheet sous la forme `logos/nom.png`. |
 | `sauvegarde/` | Copies de travail, sans effet sur le site : script Apps Script, récapitulatif complet, catalogue. |
 
 ## Mettre à jour l'application
