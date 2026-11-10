@@ -132,6 +132,7 @@
   .panel .opt[disabled] { opacity: .5; cursor: not-allowed; }
   .panel .none { padding: 14px; color: var(--discret); }
   .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 0.85rem; }
+  .livr { margin-top: 3px; font-size: 13px; font-weight: 700; color: var(--ok); }
   .reco { background: #fff1b8; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
 
   /* ---- Quantité ---- */
@@ -298,7 +299,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycby_O0xp2jZaUssuz-VO2eza3jsopsH8jdFSWaunLn3dXaxC4aJNK5O5es1bdEPPW3l3/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -723,6 +724,12 @@ function renderHistory() {
       meta.className = "meta";
       meta.textContent = [o.lieu, o.adresse || "", o.valide_le ? `commandée le ${frStamp(o.valide_le)}` : ""].filter(Boolean).join(" · ");
       left.append(name, meta);
+      if (o.livraison) {
+        const lv = document.createElement("div");
+        lv.className = "livr";
+        lv.textContent = `🚚 Livraison prévue le ${fr(o.livraison)}`;
+        left.append(lv);
+      }
       const right = document.createElement("div");
       const q = document.createElement("span");
       q.className = "qtyv";
