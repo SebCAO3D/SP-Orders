@@ -535,7 +535,10 @@ function emailHtml_(lots, day, bibserv) {
       '<div style="background:#002f6c;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0">' +
       (lot.code_tiers ? '<strong>' + esc_(lot.code_tiers) + '</strong> – ' : '<strong>') + esc_(lot.lieu) + (lot.code_tiers ? '' : '</strong>') +
       '<span style="float:right;color:#f8c200">' + lot.total + ' pneu(s)</span>' +
-      ((lot.adresses || []).length ? '<div style="font-size:12px;margin-top:4px">Livraison : ' + (lot.adresses || []).map(esc_).join(' / ') + '</div>' : '') +
+      ((lot.adresses || []).length ? '<div style="font-size:12px;margin-top:4px;color:#ffffff">Livraison : ' + (lot.adresses || []).map(function (ad) {
+          // Texte blanc dans une balise <a> sans lien : empêche Gmail/Apple Mail de transformer l'adresse en lien bleu illisible.
+          return '<a style="color:#ffffff !important;text-decoration:none !important;cursor:default;pointer-events:none">' + esc_(ad) + '</a>';
+        }).join(' / ') + '</div>' : '') +
       '</div>' +
       '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
       '<tr style="background:#f4f6fa;text-align:left"><th style="padding:6px 10px">CAI</th>' +
