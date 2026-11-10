@@ -474,7 +474,7 @@ function renderForm() {
   $("pickbox").tabIndex = noPlace ? -1 : 0;
   if (noPlace) closePanel(false);
   $("add").disabled = state.busy || state.loading || dup || !state.open || noPlace || !item || state.qty < 1;
-  $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? "Choisissez un client" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
+  $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? "" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
@@ -483,8 +483,12 @@ function buildSelects() {
   selClient.replaceChildren();
   // Plusieurs clients : rien n'est présélectionné (le garage choisit). Un seul client : il est sélectionné d'office.
   selClient.append(new Option("Choisir un client…", ""));
-  for (const p of clients()) selClient.append(new Option(p.label, p.id));
-  selClient.value = clients().some((p) => p.id === prev) ? prev : clients().length === 1 ? clients()[0].id : "";
+  // Client privilégié : « Service Provider » (id SP). Il est listé en premier et sélectionné par défaut.
+  const isSP = (p) => String(p.id).toLowerCase() === "sp" || squash(p.label) === "serviceprovider";
+  const list = [...clients().filter(isSP), ...clients().filter((p) => !isSP(p))];
+  for (const p of list) selClient.append(new Option(p.label, p.id));
+  const fav = list.find(isSP) || (list.length === 1 ? list[0] : null);
+  selClient.value = list.some((p) => p.id === prev) ? prev : fav ? fav.id : "";
 
   buildCai();
 }
