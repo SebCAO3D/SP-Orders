@@ -1,0 +1,1022 @@
+/**
+ * COMMANDES SP – Google Apps Script (à coller dans le Google Sheet)
+ *
+ * Rôle :
+ *  - Reçoit les commandes des garages (page index.html sur GitHub Pages).
+ *  - Cloisonne chaque garage : il ne voit que SES lieux et SES lignes.
+ *  - Chaque jour ouvré après l'heure limite des garages (Reglages B6, 17h30 par défaut, heure de Paris), consolide et vous envoie un email.
+ *
+ * Onglets du Google Sheet (créés automatiquement par « installer ») :
+ *  Commandes, Garages, Clients, Catalogue, Reglages
+ *
+ * NE JAMAIS partager ce Google Sheet avec les garages.
+ */
+
+const TZ = 'Europe/Paris';
+const DEFAULT_CUTOFF = 17 * 60 + 30; // clôture par défaut : 17h30 (modifiable dans Reglages, case B6)
+const MAX_QTY = 999;
+const PENDING = 'En attente';
+const ORDERED = 'OK CDE';      // l'administrateur a validé la ligne dans l'onglet Commandes
+const ORDER_COLS = ['Date', 'Garage', 'Lieu_Livraison', 'Code_Tiers_Livre', 'Code_CAI', 'Designation', 'Quantite', 'Statut', 'ID', 'Envoye', 'Date_Validation', 'Adresse_Livraison'];
+const COL_QTY = 7;     // colonne G
+const COL_STATUS = 8;  // colonne H
+
+/* ===================== Utilitaires ===================== */
+
+function ss_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function err_(status, message) {
+  const e = new Error(message);
+  e.httpStatus = status;
+  return e;
+}
+
+function table_(name) {
+  const sh = ss_().getSheetByName(name);
+  if (!sh) throw new Error('Onglet manquant : ' + name + '. Lancez « Installer » dans le menu Commandes SP.');
+  const values = sh.getDataRange().getValues();
+  if (values.length === 0) return [];
+  const head = values[0].map(String);
+  const rows = [];
+  for (let i = 1; i < values.length; i++) {
+    const o = { _row: i + 1 };
+    head.forEach(function (h, j) { o[h] = values[i][j]; });
+    rows.push(o);
+  }
+  return rows;
+}
+
+function setting_(row) {
+  return String(ss_().getSheetByName('Reglages').getRange(row, 2).getValue()).trim();
+}
+
+function asDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+  return String(v).trim();
+}
+
+function norm_(v) {
+  return String(v === undefined || v === null ? '' : v).trim();
+}
+
+function parisNow_() {
+  const d = new Date();
+  return {
+    date: Utilities.formatDate(d, TZ, 'yyyy-MM-dd'),
+    minutes: Number(Utilities.formatDate(d, TZ, 'H')) * 60 + Number(Utilities.formatDate(d, TZ, 'm')),
+    dow: Number(Utilities.formatDate(d, TZ, 'u')) // 1 = lundi ... 7 = dimanche
+  };
+}
+
+/** Mode test : onglet Reglages, case B4 = « oui ». Saisie ouverte à toute heure, tous les jours. */
+function isTestMode_() {
+  const sh = ss_().getSheetByName('Reglages');
+  if (!sh) return false;
+  return String(sh.getRange(4, 2).getValue()).trim().toLowerCase() === 'oui';
+}
+
+/**
+ * Heure limite de commande des garages, lue dans Reglages B6 (ex. 17:30, 17h30, 16h, 16.45).
+ * Valeur absente ou illisible : 17h30.
+ */
+function cutoffMinutes_() {
+  const reg = ss_().getSheetByName('Reglages');
+  if (!reg) return DEFAULT_CUTOFF;
+  const v = reg.getRange(6, 2).getValue();
+  if (v instanceof Date) return v.getHours() * 60 + v.getMinutes();      // cellule convertie en heure par Sheets
+  if (typeof v === 'number' && v > 0 && v < 1) return Math.round(v * 24 * 60); // heure stockée en fraction de jour
+  const m = String(v).trim().toLowerCase().match(/^(\d{1,2})\s*(?:[:h.]\s*(\d{1,2})?)?$/);
+  if (!m) return DEFAULT_CUTOFF;
+  const h = Number(m[1]), mi = m[2] === undefined ? 0 : Number(m[2]);
+  if (h > 23 || mi > 59) return DEFAULT_CUTOFF;
+  return h * 60 + mi;
+}
+
+function cutoffLabel_() {
+  const t = cutoffMinutes_(), h = Math.floor(t / 60), m = t % 60;
+  return h + 'h' + (m < 10 ? '0' : '') + m;
+}
+
+function orderingState_() {
+  const n = parisNow_();
+  if (isTestMode_()) {
+    return { open: true, today: n.date, message: '', test: true };
+  }
+  if (n.dow > 5) {
+    return { open: false, today: n.date, message: 'Saisie fermée le week-end. Réouverture lundi.', test: false };
+  }
+  if (n.minutes >= cutoffMinutes_()) {
+    return {
+      open: false,
+      today: n.date,
+      message: 'Clôture de ' + cutoffLabel_() + ' passée : les commandes du jour sont parties. Réouverture au prochain jour ouvré.',
+      test: false
+    };
+  }
+  return { open: true, today: n.date, message: '', test: false };
+}
+
+/* ===================== Accès garage ===================== */
+
+const KEY_MIN = 1; // un code ne peut pas être vide ; sa forme et sa longueur sont libres
+
+/**
+ * Identifie le garage par son code. Le nom du garage dans le lien est facultatif
+ * (anciens liens ?garage=nord&k=... toujours valables). Un code partagé par deux garages est refusé.
+ */
+function authenticate_(garageId, key) {
+  const rows = table_('Garages').filter(function (r) {
+    const secret = norm_(r.cle);
+    return secret.length >= KEY_MIN && key && secret === key &&
+      (!garageId || norm_(r.id).toLowerCase() === garageId);
+  });
+  if (rows.length !== 1) throw err_(401, 'Accès refusé. Vérifiez votre lien.');
+  return rows[0];
+}
+
+/** Lieux de livraison autorisés pour CE garage uniquement. */
+function places_(g, garageId) {
+  const places = [{
+    id: 'atelier',
+    type: 'atelier',
+    label: norm_(g.atelier_libelle),
+    code_tiers: norm_(g.atelier_code_tiers),
+    adresse: norm_(g.atelier_adresse),
+    logo: norm_(g.logo)
+  }];
+  table_('Clients').forEach(function (c) {
+    if (norm_(c.garage).toLowerCase() === garageId && norm_(c.id) && norm_(c.code_tiers)) {
+      places.push({
+        id: norm_(c.id), type: 'client', label: norm_(c.nom) || norm_(c.id), code_tiers: norm_(c.code_tiers),
+        adresse: norm_(c.adresse), logo: norm_(c.logo),
+        // null = toutes les références ; sinon liste des CAI autorisés pour ce client.
+        cais: allowedCais_(c.references_autorisees)
+      });
+    }
+  });
+  return places;
+}
+
+/**
+ * Colonne « references_autorisees » de l'onglet Clients : liste séparée par ; , ou retour à la ligne.
+ * Chaque élément est soit un CAI exact (154820), soit le début d'une désignation / une dimension (315/80 R22.5).
+ * Vide = toutes les références du catalogue. Retourne null (tout) ou un tableau de CAI.
+ */
+function allowedCais_(spec) {
+  const tokens = String(spec === undefined || spec === null ? '' : spec)
+    .split(/[;,\n]+/).map(function (t) { return norm_(t).replace(/\s+/g, ' ').toLowerCase(); })
+    .filter(Boolean);
+  if (tokens.length === 0) return null;
+  return catalog_().filter(function (k) {
+    const d = k.designation.replace(/\s+/g, ' ').toLowerCase();
+    return tokens.some(function (t) { return (k.cai && t === k.cai.toLowerCase()) || d.indexOf(t) === 0; });
+  }).map(function (k) { return k.ref; });
+}
+
+function catalog_() {
+  return table_('Catalogue')
+    .filter(function (r) { return norm_(r.designation); })   // le CAI peut être vide : il ne bloque pas l'affichage
+    .map(function (r) {
+      return {
+        cai: norm_(r.cai),
+        ref: norm_(r.cai) || norm_(r.designation),   // identifiant utilisé par la page (CAI, sinon désignation)
+        designation: norm_(r.designation),
+        famille: norm_(r.famille) || 'Autres',
+        recommande: norm_(r.recommande).toLowerCase() === 'oui'
+      };
+    });
+}
+
+/* ===================== Commandes ===================== */
+
+function toOrder_(r) {
+  return {
+    id: norm_(r.ID),
+    date: asDate_(r.Date),
+    lieu: norm_(r.Lieu_Livraison),
+    adresse: norm_(r.Adresse_Livraison),
+    code_tiers: norm_(r.Code_Tiers_Livre),
+    cai: norm_(r.Code_CAI),
+    ref: norm_(r.Code_CAI) || norm_(r.Designation),
+    designation: norm_(r.Designation),
+    quantite: Number(r.Quantite),
+    // Deux statuts visibles seulement : « En attente » ou « Commandée » (= OK CDE dans le Sheet).
+    statut: isOrdered_(r.Statut) ? 'Commandée' : PENDING,
+    envoye: !!norm_(r.Envoye),
+    valide_le: isOrdered_(r.Statut) ? asStamp_(r.Date_Validation) : ''
+  };
+}
+
+/** Une ligne est « commandée » quand le Statut vaut OK CDE (ou l'ancien libellé « Commandée »). */
+function isOrdered_(v) {
+  const x = normCmd_(v);
+  return x === 'OKCDE' || x === 'COMMANDÉE';
+}
+
+function garageRows_(garageId, today) {
+  return table_('Commandes')
+    .filter(function (r) {
+      return norm_(r.ID) && norm_(r.Garage).toLowerCase() === garageId &&
+        (asDate_(r.Date) === today || (!isOrdered_(r.Statut) && !norm_(r.Envoye)));
+    })
+    .reverse(); // plus récentes d'abord
+}
+
+function ownedRow_(garageId, id) {
+  const row = table_('Commandes').filter(function (r) { return norm_(r.ID) === id; })[0];
+  // 404 (et non 403) : on ne révèle rien sur les lignes des autres garages.
+  if (!row || norm_(row.Garage).toLowerCase() !== garageId) throw err_(404, 'Ligne introuvable.');
+  return row;
+}
+
+function assertEditable_(row, state) {
+  if (!state.open) throw err_(409, state.message);
+  if (isOrdered_(row.Statut) || norm_(row.Envoye) || asDate_(row.Date) !== state.today) {
+    throw err_(409, "Cette ligne n'est plus modifiable.");
+  }
+}
+
+function parseQty_(v) {
+  const q = Number(v);
+  if (!Number.isInteger(q) || q < 1 || q > MAX_QTY) {
+    throw err_(400, 'Quantité invalide (entier de 1 à ' + MAX_QTY + ').');
+  }
+  return q;
+}
+
+function colOf_(sh, name) {
+  const lastCol = Math.max(sh.getLastColumn(), 1);
+  const head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  const i = head.indexOf(name);
+  if (i === -1) throw new Error('Colonne « ' + name + ' » absente de l\'onglet ' + sh.getName() + '. Lancez « Installer » dans le menu Commandes SP.');
+  return i + 1;
+}
+
+function asStamp_(v) {
+  if (v instanceof Date) {
+    const f = Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm');
+    return f.slice(11) === '00:00' ? f.slice(0, 10) : f;   // date choisie au calendrier : pas d'heure
+  }
+  return String(v === undefined || v === null ? '' : v).trim();
+}
+
+/** Vraie date (minuit, heure de Paris) à écrire dans une cellule « date » du Sheet. Accepte 'yyyy-MM-dd' ou 'yyyy-MM-dd HH:mm'. */
+function dateCell_(iso) {
+  const m = String(iso || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? Utilities.parseDate(m[1], TZ, 'yyyy-MM-dd') : '';
+}
+
+function addDays_(iso, delta) {
+  const d = new Date(iso + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Migration seulement : Lot_ID -> date/heure de validation, lus dans l'ancien onglet Lots. */
+function lotsValidationLegacy_() {
+  const out = {};
+  if (!ss_().getSheetByName('Lots')) return out;
+  table_('Lots').forEach(function (r) {
+    const id = norm_(r.Lot_ID);
+    const v = asStamp_(r.Date_Validation);
+    if (id && v) out[id] = v;
+  });
+  return out;
+}
+
+/**
+ * Prévient l'administrateur par email dès qu'une ligne est ajoutée.
+ * Actif en mode test (Reglages B4 = oui) ou si Reglages B5 = oui. Un échec d'envoi ne bloque jamais la commande.
+ */
+function notifyAdd_(g, place, item, qty, state) {
+  try {
+    const on = state.test || String(setting_(5)).toLowerCase() === 'oui';
+    const to = setting_(1);
+    if (!on || !to) return;
+    const when = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
+    const lines = [
+      'Garage : ' + norm_(g.nom),
+      'Livraison : ' + place.label + ' (' + place.code_tiers + ')',
+      'Pneu : ' + item.designation + (item.cai ? ' – CAI ' + item.cai : ''),
+      'Quantité : ' + qty,
+      'Saisie le : ' + frStamp_(when)
+    ];
+    MailApp.sendEmail({
+      to: to,
+      subject: (state.test ? '[TEST] ' : '') + 'Nouvelle commande – ' + norm_(g.nom) + ' – ' + qty + ' × ' + (item.cai ? 'CAI ' + item.cai : item.designation),
+      body: lines.join('\n') + '\n\n' + (state.test
+        ? 'Mode test : cette ligne sera consolidée avec « Lancer la consolidation maintenant ».'
+        : 'Elle sera consolidée avec les autres commandes après la clôture de ' + cutoffLabel_() + '.'),
+      name: 'Commandes SP'
+    });
+  } catch (e) {
+    console.error('Notification impossible : ' + e);
+  }
+}
+
+function frStamp_(stamp) {
+  const p = String(stamp).split(' ');
+  return frDate_(p[0]) + (p[1] ? ' à ' + p[1].replace(':', 'h') : '');
+}
+
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ===================== API (appelée par index.html) ===================== */
+
+function handle_(body) {
+  const key = String(body.key || '').trim();
+  const g = authenticate_(norm_(body.garage).toLowerCase(), key);
+  const garageId = norm_(g.id).toLowerCase();
+  const state = orderingState_();
+  const places = places_(g, garageId);
+
+  switch (body.action) {
+    case 'config':
+      return {
+        garage: { id: garageId, nom: norm_(g.nom), logo: norm_(g.logo) },
+        lieux: places,
+        catalogue: catalog_(),
+        today: state.today,
+        open: state.open,
+        test: !!state.test,
+        message: state.message
+      };
+
+    case 'orders':
+      return {
+        today: state.today,
+        open: state.open,
+        test: !!state.test,
+        orders: garageRows_(garageId, state.today).map(toOrder_)
+      };
+
+    case 'history': {
+      const since = addDays_(state.today, -60);
+      const rows = table_('Commandes').filter(function (r) {
+        return norm_(r.ID) && norm_(r.Garage).toLowerCase() === garageId && asDate_(r.Date) >= since;
+      }).reverse().slice(0, 400);
+      return {
+        today: state.today,
+        orders: rows.map(toOrder_)
+      };
+    }
+
+    case 'add': {
+      if (!state.open) throw err_(409, state.message);
+      const place = places.filter(function (p) { return p.id === norm_(body.lieu_id); })[0];
+      if (!place) throw err_(400, 'Lieu de livraison non autorisé.');
+      const wanted = norm_(body.ref !== undefined ? body.ref : body.cai);
+      const item = catalog_().filter(function (c) { return c.ref === wanted; })[0];
+      if (!item) throw err_(400, 'Code CAI inconnu.');
+      if (place.cais && place.cais.indexOf(item.ref) < 0) throw err_(400, 'Cette référence n\'est pas autorisée pour ce client.');
+      const qty = parseQty_(body.quantite);
+      // Adresse de livraison : proposée par le client choisi, modifiable librement par le garage.
+      const adresse = String(body.adresse === undefined || body.adresse === null ? '' : body.adresse)
+        .replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200) || place.adresse || '';
+
+      const added = withLock_(function () {
+        // Anti-doublon : Date + Garage + Tiers livré + CAI (vérifié côté serveur).
+        const dup = garageRows_(garageId, state.today).filter(function (r) {
+          return asDate_(r.Date) === state.today &&
+            norm_(r.Code_Tiers_Livre) === place.code_tiers &&
+            (norm_(r.Code_CAI) || norm_(r.Designation)) === item.ref;
+        })[0];
+        if (dup) {
+          throw err_(409, 'Cette référence est déjà dans le panier pour ce lieu. Ajustez la quantité sur la ligne existante.');
+        }
+        const id = Utilities.getUuid();
+        ss_().getSheetByName('Commandes').appendRow([
+          state.today, garageId, place.label, place.code_tiers, item.cai, item.designation, qty, PENDING, id,
+          '', '', adresse
+        ]);
+        return {
+          order: {
+            id: id, date: state.today, lieu: place.label, code_tiers: place.code_tiers,
+            cai: item.cai, ref: item.ref, designation: item.designation, quantite: qty, statut: PENDING, adresse: adresse
+          }
+        };
+      });
+      notifyAdd_(g, place, item, qty, state);
+      return added;
+    }
+
+    case 'update': {
+      const qty = parseQty_(body.quantite);
+      return withLock_(function () {
+        const row = ownedRow_(garageId, norm_(body.id));
+        assertEditable_(row, state);
+        ss_().getSheetByName('Commandes').getRange(row._row, COL_QTY).setValue(qty);
+        row.Quantite = qty;
+        return { order: toOrder_(row) };
+      });
+    }
+
+    case 'delete':
+      return withLock_(function () {
+        const row = ownedRow_(garageId, norm_(body.id));
+        assertEditable_(row, state);
+        ss_().getSheetByName('Commandes').deleteRow(row._row);
+        return { deleted: norm_(row.ID) };
+      });
+
+    default:
+      throw err_(400, 'Action inconnue.');
+  }
+}
+
+function doPost(e) {
+  let out;
+  try {
+    const body = JSON.parse(e.postData.contents);
+    out = handle_(body);
+    out.ok = true;
+  } catch (err) {
+    if (err && err.httpStatus) {
+      out = { ok: false, status: err.httpStatus, error: err.message };
+    } else {
+      console.error(err);
+      out = { ok: false, status: 500, error: 'Erreur interne. Réessayez dans un instant.' };
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doGet() {
+  return ContentService.createTextOutput('Commandes SP : service actif.');
+}
+
+/* ===================== Consolidation + email ===================== */
+
+function buildLots_(rows) {
+  const byTiers = {};
+  rows.forEach(function (r) {
+    const k = norm_(r.Code_Tiers_Livre);
+    (byTiers[k] = byTiers[k] || []).push(r);
+  });
+  return Object.keys(byTiers).sort().map(function (tiers) {
+    const group = byTiers[tiers];
+    const qty = {};
+    const names = {};
+    const garages = {};
+    const adr = {};
+    group.forEach(function (r) {
+      if (norm_(r.Adresse_Livraison)) adr[norm_(r.Adresse_Livraison)] = true;
+      const cai = norm_(r.Code_CAI) || norm_(r.Designation);
+      qty[cai] = (qty[cai] || 0) + Number(r.Quantite);
+      if (!names[cai]) names[cai] = norm_(r.Designation);
+      garages[norm_(r.Garage)] = true;
+    });
+    const lignes = Object.keys(qty).sort().map(function (cai) {
+      return { cai: cai === names[cai] ? '' : cai, designation: names[cai], quantite: qty[cai] };
+    });
+    return {
+      code_tiers: tiers,
+      lieu: norm_(group[0].Lieu_Livraison),
+      adresses: Object.keys(adr),
+      garages: Object.keys(garages).sort(),
+      lignes: lignes,
+      rows: group,
+      total: lignes.reduce(function (s, l) { return s + l.quantite; }, 0)
+    };
+  });
+}
+
+function esc_(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function frDate_(iso) {
+  return iso.split('-').reverse().join('/');
+}
+
+function emailHtml_(lots, day, bibserv) {
+  const td = 'padding:6px 10px;border-bottom:1px solid #e3e8f0';
+  const blocks = lots.map(function (lot) {
+    const rows = lot.lignes.map(function (l) {
+      return '<tr><td style="' + td + '">' + esc_(l.cai) + '</td><td style="' + td + '">' + esc_(l.designation) +
+        '</td><td style="' + td + ';text-align:right;font-weight:700">' + l.quantite + '</td></tr>';
+    }).join('');
+    return '<div style="margin:0 0 22px">' +
+      '<div style="background:#002f6c;color:#fff;padding:10px 14px;border-radius:6px 6px 0 0">' +
+      '<strong>' + esc_(lot.code_tiers) + '</strong> – ' + esc_(lot.lieu) +
+      '<span style="float:right;color:#f8c200">' + lot.total + ' pneu(s)</span>' +
+      ((lot.adresses || []).length ? '<div style="font-size:12px;margin-top:4px">Livraison : ' + (lot.adresses || []).map(esc_).join(' / ') + '</div>' : '') +
+      '</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
+      '<tr style="background:#f4f6fa;text-align:left"><th style="padding:6px 10px">CAI</th>' +
+      '<th style="padding:6px 10px">Désignation</th><th style="padding:6px 10px;text-align:right">Qté nette</th></tr>' +
+      rows + '</table>' +
+      '<div style="font-size:12px;color:#5b6678;padding:4px 2px">Garages : ' + esc_(lot.garages.join(', ')) + '</div></div>';
+  }).join('');
+  const total = lots.reduce(function (s, l) { return s + l.total; }, 0);
+  const link = bibserv
+    ? '<p><a href="' + esc_(bibserv) + '" style="background:#f8c200;color:#002f6c;padding:12px 20px;border-radius:6px;' +
+      'text-decoration:none;font-weight:700;display:inline-block">Ouvrir BibServ</a></p>'
+    : '';
+  return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:auto;color:#14213d">' +
+    '<h2 style="color:#002f6c;margin-bottom:4px">Commandes du ' + frDate_(day) + '</h2>' +
+    '<p style="margin-top:0">' + lots.length + ' lot(s) – ' + total + ' pneu(s) au total.</p>' +
+    blocks + link +
+    '<p style="font-size:12px;color:#5b6678">Un lot = un Code Tiers Livré. Aucune commande n\'est passée ' +
+    'automatiquement : saisissez ces paniers vous-même dans BibServ, puis choisissez <b>OK CDE</b> dans la ' +
+    'colonne <b>Statut</b> de l\'onglet <b>Commandes</b> du Google Sheet, sur les lignes concernées : ' +
+    'les garages verront alors « Commandée » dans leur suivi.</p></div>';
+}
+
+function emailText_(lots, day) {
+  const out = ['Commandes du ' + frDate_(day), ''];
+  lots.forEach(function (lot) {
+    out.push(lot.code_tiers + ' - ' + lot.lieu + ' (' + lot.total + ' pneu(s))');
+    if ((lot.adresses || []).length) out.push('  Livraison : ' + lot.adresses.join(' / '));
+    lot.lignes.forEach(function (l) { out.push('  ' + (l.cai ? l.cai + '  ' : '') + l.designation + '  x' + l.quantite); });
+    out.push('');
+  });
+  out.push("Après commande sur BibServ : choisissez OK CDE dans la colonne Statut de l'onglet Commandes, sur les lignes concernées.");
+  return out.join('\n');
+}
+
+/** Appelée par le déclencheur automatique (ne pas renommer). */
+function consoliderAuto() {
+  // Sécurité : jamais avant la clôture des garages.
+  if (parisNow_().minutes < cutoffMinutes_()) return;
+  consolider_(false);
+}
+
+/** Appelée par le menu « Lancer la consolidation maintenant ». */
+function menuConsolider() {
+  const r = consolider_(true);
+  SpreadsheetApp.getUi().alert(r.message);
+}
+
+function consolider_(force) {
+  const n = parisNow_();
+  if (!force && n.dow > 5) return { sent: 0, message: 'Week-end : rien à faire.' };
+
+  return withLock_(function () {
+    const cmd = ss_().getSheetByName('Commandes');
+    // À envoyer : lignes pas encore commandées ET pas encore envoyées par email.
+    const pending = table_('Commandes').filter(function (r) {
+      return norm_(r.ID) && !isOrdered_(r.Statut) && !norm_(r.Envoye) && asDate_(r.Date) <= n.date;
+    });
+    if (pending.length === 0) return { sent: 0, message: 'Aucune nouvelle ligne à envoyer : pas d\'email.' };
+
+    const to = setting_(1);
+    if (!to) throw new Error("Renseignez l'adresse email dans l'onglet Reglages (case B1).");
+    // Vérification AVANT l'envoi : si une colonne manque, rien n'est envoyé ni modifié.
+    const colEnv = colOf_(cmd, 'Envoye');
+
+    const lots = buildLots_(pending);
+    const total = lots.reduce(function (s, l) { return s + l.total; }, 0);
+
+    // Email d'abord : s'il échoue, les lignes ne sont pas marquées envoyées et rien n'est perdu.
+    MailApp.sendEmail({
+      to: to,
+      subject: '[BibServ] ' + lots.length + ' lot(s) à commander – ' + frDate_(n.date),
+      body: emailText_(lots, n.date),
+      htmlBody: emailHtml_(lots, n.date, setting_(2)),
+      name: 'Commandes SP'
+    });
+
+    // On marque les lignes « envoyées » (colonne masquée) : elles restent « En attente » jusqu'à votre OK CDE.
+    const stamp = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm');
+    const mark = {};
+    pending.forEach(function (r) { mark[r._row] = true; });
+    const last = cmd.getLastRow();
+    const rng = cmd.getRange(2, colEnv, last - 1, 1);
+    const vals = rng.getValues();
+    for (let i = 0; i < vals.length; i++) { if (mark[i + 2]) vals[i][0] = stamp; }
+    rng.setValues(vals);
+
+    return {
+      sent: pending.length,
+      message: 'Email envoyé à ' + to + ' : ' + pending.length + ' ligne(s), ' + lots.length + ' lot(s), ' +
+        total + ' pneu(s). Une fois commandé sur BibServ, choisissez OK CDE dans la colonne Statut ' +
+        'de l\'onglet Commandes.'
+    };
+  });
+}
+
+/* ===================== Validation « OK CDE » ===================== */
+
+function normCmd_(v) {
+  return String(v === undefined || v === null ? '' : v).replace(/\s+/g, '').toUpperCase();
+}
+
+/**
+ * Déclencheur installé par « Installer » : s'exécute à chaque modification du Sheet.
+ * Onglet Commandes, colonne Statut :
+ *   OK CDE (toute casse) -> « OK CDE » + date de validation ; les garages voient « Commandée »
+ *   vide ou « En attente » -> « En attente », date effacée (pour corriger une erreur)
+ *   autre texte -> ignoré (retour à l'ancienne valeur si Google la fournit)
+ */
+function surModification(e) {
+  try {
+    if (!e || !e.range) return;
+    const sh = e.range.getSheet();
+    if (sh.getName() === 'Commandes' && changerReference_(e, sh)) return;
+    if (sh.getName() !== 'Commandes') return;
+    const colSt = colOf_(sh, 'Statut');
+    const c0 = e.range.getColumn();
+    if (colSt < c0 || colSt > c0 + e.range.getNumColumns() - 1) return;
+    const colId = colOf_(sh, 'ID');
+    const colDV = colOf_(sh, 'Date_Validation');
+    const first = Math.max(e.range.getRow(), 2);
+    const last = e.range.getRow() + e.range.getNumRows() - 1;
+    const now = dateCell_(parisNow_().date);
+
+    for (let r = first; r <= last; r++) {
+      if (!norm_(sh.getRange(r, colId).getValue())) continue;      // ligne vide : on ne touche à rien
+      const cell = sh.getRange(r, colSt);
+      const cmd = normCmd_(cell.getValue());
+      if (cmd === 'OKCDE' || cmd === 'COMMANDÉE') {
+        if (norm_(cell.getValue()) !== ORDERED) cell.setValue(ORDERED);
+        if (!norm_(sh.getRange(r, colDV).getValue())) sh.getRange(r, colDV).setValue(now);
+      } else if (cmd === '' || cmd === 'ENATTENTE') {
+        if (norm_(cell.getValue()) !== PENDING) cell.setValue(PENDING);
+        sh.getRange(r, colDV).setValue('');
+      } else {
+        if (typeof e.oldValue === 'string' && e.oldValue !== '' && e.range.getNumRows() === 1) cell.setValue(e.oldValue);
+        if (e.source && e.source.toast) e.source.toast('Choisissez « En attente » ou « OK CDE » dans la liste.', 'Commandes SP', 6);
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+/**
+ * Onglet Commandes, colonnes Code_CAI et Designation (listes déroulantes du Catalogue) : vous choisissez l'une
+ * OU l'autre, l'autre colonne se remplit toute seule.
+ * Retourne true si la modification concernait l'une de ces colonnes.
+ */
+function changerReference_(e, sh) {
+  const colCai = colOf_(sh, 'Code_CAI'), colDes = colOf_(sh, 'Designation');
+  const c0 = e.range.getColumn(), c1 = c0 + e.range.getNumColumns() - 1;
+  const hitCai = colCai >= c0 && colCai <= c1, hitDes = colDes >= c0 && colDes <= c1;
+  if (!hitCai && !hitDes) return false;
+  const byCai = {}, byDes = {};
+  catalog_().forEach(function (k) { if (k.cai) byCai[k.cai] = k; if (!byDes[k.designation]) byDes[k.designation] = k; });
+  const first = Math.max(e.range.getRow(), 2);
+  const last = e.range.getRow() + e.range.getNumRows() - 1;
+  const single = e.range.getNumRows() === 1 && e.range.getNumColumns() === 1;
+  let msg = '';
+  for (let r = first; r <= last; r++) {
+    if (!norm_(sh.getRange(r, colCai).getValue()) && !norm_(sh.getRange(r, colDes).getValue())) continue;
+    // Si les deux colonnes sont collées ensemble, la référence (CAI) fait foi.
+    const fromCai = hitCai;
+    const cell = sh.getRange(r, fromCai ? colCai : colDes);
+    const v = norm_(cell.getValue());
+    const k = fromCai ? byCai[v] : byDes[v];
+    if (!k) {
+      if (single && typeof e.oldValue === 'string' && e.oldValue !== '') cell.setValue(e.oldValue);
+      msg = 'Choisissez la référence ou la désignation dans la liste (onglet Catalogue).';
+      continue;
+    }
+    sh.getRange(r, colCai).setValue(k.cai);
+    sh.getRange(r, colDes).setValue(k.designation);
+  }
+  if (msg && e.source && e.source.toast) e.source.toast(msg, 'Commandes SP', 6);
+  return true;
+}
+
+/** Menu : valide d'un coup toutes les lignes déjà envoyées par email (vous avez tout commandé sur BibServ). */
+function menuToutValider() {
+  const ui = SpreadsheetApp.getUi();
+  const rows = table_('Commandes').filter(function (r) {
+    return norm_(r.ID) && !isOrdered_(r.Statut) && norm_(r.Envoye);
+  });
+  if (rows.length === 0) { ui.alert('Aucune ligne envoyée en attente de validation.'); return; }
+  const rep = ui.alert('Tout valider',
+    rows.length + ' ligne(s) déjà envoyée(s) par email vont passer en « OK CDE » (visibles « Commandée » chez les garages).\n\n' +
+    'Confirmez seulement si vous avez bien passé toutes ces commandes sur BibServ. Continuer ?', ui.ButtonSet.YES_NO);
+  if (rep !== ui.Button.YES) return;
+  withLock_(function () {
+    const sh = ss_().getSheetByName('Commandes');
+    const colSt = colOf_(sh, 'Statut'), colDV = colOf_(sh, 'Date_Validation');
+    const now = dateCell_(parisNow_().date);
+    rows.forEach(function (r) {
+      sh.getRange(r._row, colSt).setValue(ORDERED);
+      if (!norm_(sh.getRange(r._row, colDV).getValue())) sh.getRange(r._row, colDV).setValue(now);
+    });
+  });
+  ui.alert(rows.length + ' ligne(s) validée(s).');
+}
+
+/* ===================== Installation (une seule fois) ===================== */
+
+/** Code court de 10 caractères (minuscules et chiffres, sans caractères ambigus : pas de 0/o, 1/l/i). */
+function randomKey_() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'; // 31 caractères
+  const hex = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  let out = '';
+  for (let i = 0; i < 10; i++) {
+    out += alphabet.charAt(parseInt(hex.substr(i * 2, 2), 16) % alphabet.length);
+  }
+  return out;
+}
+
+function colLetter_(n) {
+  let s = '';
+  while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - m) / 26); }
+  return s;
+}
+
+/** Menu : remplace les codes de tous les garages par des codes courts (les anciens liens cessent de marcher). */
+function menuNouvellesCles() {
+  const ui = SpreadsheetApp.getUi();
+  const rep = ui.alert(
+    'Nouveaux codes courts',
+    'Tous les garages recevront un NOUVEAU code court. Les anciens liens cesseront de fonctionner : ' +
+    'vous devrez renvoyer à chaque garage son nouveau lien (colonne « lien » de l\'onglet Garages).\n\nContinuer ?',
+    ui.ButtonSet.YES_NO);
+  if (rep !== ui.Button.YES) return;
+  const sh = ss_().getSheetByName('Garages');
+  const colId = colOf_(sh, 'id');
+  const colCle = colOf_(sh, 'cle');
+  const used = {};
+  // On ne réattribue jamais un code déjà présent (ancien code d'un autre garage compris).
+  for (let r = 2; r <= sh.getLastRow(); r++) used[norm_(sh.getRange(r, colCle).getValue())] = true;
+  let n = 0;
+  for (let r = 2; r <= sh.getLastRow(); r++) {
+    if (!norm_(sh.getRange(r, colId).getValue())) continue;
+    let k;
+    do { k = randomKey_(); } while (used[k]);
+    used[k] = true;
+    sh.getRange(r, colCle).setValue(k);
+    n++;
+  }
+  ui.alert(n + ' garage(s) mis à jour. Les nouveaux liens sont dans l\'onglet Garages, colonne « lien ».');
+}
+
+function ensureSheet_(name, header, sample) {
+  const ss = ss_();
+  let sh = ss.getSheetByName(name);
+  let created = false;
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    created = true;
+  }
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, header.length).setValues([header]);
+    sh.getRange(1, 1, 1, header.length).setFontWeight('bold').setBackground('#002f6c').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+    if (sample && sample.length) sh.getRange(2, 1, sample.length, header.length).setValues(sample);
+    created = true;
+  }
+  return { sheet: sh, created: created };
+}
+
+function ensureColumns_(sh, header) {
+  const lastCol = Math.max(sh.getLastColumn(), 1);
+  const row = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  const missing = header.filter(function (h) { return row.indexOf(h) === -1; });
+  if (missing.length) {
+    sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+    sh.getRange(1, lastCol + 1, 1, missing.length).setFontWeight('bold').setBackground('#002f6c').setFontColor('#ffffff');
+  }
+}
+
+/**
+ * Reprend l'ancien système : statut « Transmise » -> « En attente » (+ marquée envoyée, pour ne pas la renvoyer),
+ * statut « Commandée » -> « OK CDE » (date reprise de l'ancien onglet Lots), puis supprime l'onglet Lots
+ * et la colonne Lot. Sans effet si rien à migrer.
+ */
+function migrerAnciennesDonnees_(sh) {
+  const last = sh.getLastRow();
+  const lastCol = sh.getLastColumn();
+  const head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  const iLot = head.indexOf('Lot');
+  if (last >= 2) {
+    const valid = lotsValidationLegacy_();
+    const colSt = colOf_(sh, 'Statut'), colEnv = colOf_(sh, 'Envoye'), colDV = colOf_(sh, 'Date_Validation');
+    const st = sh.getRange(2, colSt, last - 1, 1).getValues();
+    const env = sh.getRange(2, colEnv, last - 1, 1).getValues();
+    const dv = sh.getRange(2, colDV, last - 1, 1).getValues();
+    const lots = iLot >= 0 ? sh.getRange(2, iLot + 1, last - 1, 1).getValues() : null;
+    for (let i = 0; i < st.length; i++) {
+      const v = norm_(st[i][0]);
+      if (v === 'Transmise') {
+        st[i][0] = PENDING;
+        if (!norm_(env[i][0])) env[i][0] = 'migré';
+      } else if (v === 'Commandée') {
+        st[i][0] = ORDERED;
+        if (!norm_(env[i][0])) env[i][0] = 'migré';
+        if (!norm_(dv[i][0]) && lots) dv[i][0] = valid[norm_(lots[i][0])] || '';
+      }
+    }
+    // Date_Validation : les anciens textes « 2026-11-08 18:00 » deviennent de vraies dates (calendrier).
+    for (let i = 0; i < dv.length; i++) {
+      if (typeof dv[i][0] === 'string' && dv[i][0].trim()) dv[i][0] = dateCell_(dv[i][0]);
+    }
+    sh.getRange(2, colSt, last - 1, 1).setValues(st);
+    sh.getRange(2, colEnv, last - 1, 1).setValues(env);
+    sh.getRange(2, colDV, last - 1, 1).setValues(dv);
+  }
+  if (iLot >= 0) sh.deleteColumn(iLot + 1);
+  const oldLots = ss_().getSheetByName('Lots');
+  if (oldLots && ss_().getSheets().length > 1) ss_().deleteSheet(oldLots);
+}
+
+function installer() {
+  const ss = ss_();
+  ss.setSpreadsheetTimeZone(TZ);
+
+  const cmd = ensureSheet_('Commandes', ORDER_COLS, null).sheet;
+  ensureColumns_(cmd, ORDER_COLS);
+  cmd.getRange(2, colOf_(cmd, 'Date_Validation'), 999, 1).setNumberFormat('dd/MM/yyyy'); // avant migration : les dates restent des dates
+  migrerAnciennesDonnees_(cmd);      // ancien système (onglet Lots, statuts Transmise / Commandée)
+  cmd.getRange(1, colOf_(cmd, 'Adresse_Livraison'), 1000, 1).setNumberFormat('@');
+  cmd.getRange('A:F').setNumberFormat('@'); // texte : garde 2026-11-09 et les codes tels quels
+  cmd.getRange(1, colOf_(cmd, 'ID'), cmd.getMaxRows ? cmd.getMaxRows() : 1000, 2).setNumberFormat('@');
+  cmd.getRange('H2:H1000').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList([PENDING, ORDERED], true).setAllowInvalid(true).build()
+  );
+  // Date de validation : vraie date, choisie au calendrier (clic dans la case).
+  const colDVi = colOf_(cmd, 'Date_Validation');
+  cmd.getRange(2, colDVi, 999, 1).setNumberFormat('dd/MM/yyyy');
+  cmd.getRange(2, colDVi, 999, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false)
+      .setHelpText('Choisissez une date dans le calendrier.').build()
+  );
+  // Colonnes techniques masquées (ID, Envoye) pour garder un tableau simple.
+  cmd.hideColumns(colOf_(cmd, 'ID'));
+  cmd.hideColumns(colOf_(cmd, 'Envoye'));
+
+  const G_HEAD = ['id', 'nom', 'cle', 'atelier_libelle', 'atelier_code_tiers', 'lien', 'atelier_adresse', 'logo'];
+  const g = ensureSheet_('Garages', G_HEAD, [
+    ['nord', 'Garage Nord', randomKey_(), 'Atelier Garage (SP)', 'TL-10001', '', 'ZI Ouest, Amiens'],
+    ['sud', 'Garage Sud', randomKey_(), 'Atelier Garage (SP)', 'TL-10002', '', 'ZI Sud, Marseille']
+  ]);
+  ensureColumns_(g.sheet, G_HEAD);
+  g.sheet.getRange('A:E').setNumberFormat('@');
+  g.sheet.getRange('G:G').setNumberFormat('@');
+
+  const C_HEAD = ['garage', 'id', 'nom', 'code_tiers', 'adresse', 'logo', 'references_autorisees'];
+  const c = ensureSheet_('Clients', C_HEAD, [
+    ['nord', 'transports-dupont', 'Transports Dupont', 'TL-98421', 'Amiens'],
+    ['nord', 'martin-logistique', 'Martin Logistique', 'TL-98422', 'Albert'],
+    ['sud', 'sud-express', 'Sud Express', 'TL-98530', 'Marseille']
+  ]);
+  ensureColumns_(c.sheet, C_HEAD);
+  c.sheet.getRange('A:G').setNumberFormat('@');
+
+  const K_HEAD = ['cai', 'designation', 'famille', 'recommande'];
+  const cat = ensureSheet_('Catalogue', K_HEAD, [
+    ['154820', '315/80 R22.5 X MULTI D', 'Remix', 'oui'],
+    ['154821', '315/80 R22.5 X MULTI Z', 'Neuf', ''],
+    ['262410', '295/80 R22.5 X MULTI Z', 'Neuf', 'oui'],
+    ['262411', '295/80 R22.5 X MULTI D', 'Remix', '']
+  ]);
+  ensureColumns_(cat.sheet, K_HEAD);
+  cat.sheet.getRange('A:D').setNumberFormat('@');
+  // Listes déroulantes des références (Catalogue) pour modifier une ligne.
+  cmd.getRange('E2:E1000').setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireValueInRange(cat.sheet.getRange('A2:A500'), true)
+      .setAllowInvalid(true).build()
+  );
+  cmd.getRange('F2:F1000').setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireValueInRange(cat.sheet.getRange('B2:B500'), true)
+      .setAllowInvalid(true).build()
+  );
+
+  // Onglet Reglages : pas d'en-tête, les valeurs sont lues en B1, B2, B3.
+  let reg = ss.getSheetByName('Reglages');
+  if (!reg) {
+    reg = ss.insertSheet('Reglages');
+    reg.getRange(1, 1, 3, 2).setValues([
+      ['Votre email (reçoit le récapitulatif)', ''],
+      ['Adresse de votre espace BibServ', 'https://www.bibserv.michelin.com'],
+      ['Adresse de la page des garages', 'https://sebcao3d.github.io/SP-Orders/']
+    ]);
+    reg.getRange('A1:A3').setFontWeight('bold');
+    reg.setColumnWidth(1, 320);
+    reg.setColumnWidth(2, 420);
+  }
+
+  // Mode test (ligne 4 de Reglages) : ajouté sans toucher à vos autres réglages.
+  if (!norm_(reg.getRange(4, 1).getValue())) {
+    reg.getRange(4, 1, 1, 2).setValues([['Mode test : oui = saisie ouverte à toute heure (remettre non ensuite)', 'non']]);
+    reg.getRange('A4').setFontWeight('bold');
+  }
+  reg.getRange('B4').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(['non', 'oui'], true).setAllowInvalid(false).build()
+  );
+
+  // Alerte email à chaque ligne ajoutée (ligne 5). Toujours active en mode test.
+  if (!norm_(reg.getRange(5, 1).getValue())) {
+    reg.getRange(5, 1, 1, 2).setValues([['Prévenir par email à chaque ligne ajoutée (oui/non). Toujours actif en mode test.', 'non']]);
+    reg.getRange('A5').setFontWeight('bold');
+  }
+  reg.getRange('B5').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(['non', 'oui'], true).setAllowInvalid(false).build()
+  );
+
+  // Heure limite de commande des garages (ligne 6), modifiable à tout moment.
+  if (!norm_(reg.getRange(6, 1).getValue())) {
+    reg.getRange(6, 1, 1, 2).setValues([['Heure limite de commande des garages (ex. 17:30)', '17:30']]);
+    reg.getRange('A6').setFontWeight('bold');
+  }
+  reg.getRange('B6').setNumberFormat('@');
+
+  // Liens des garages : adresse de la page + code court (colonne calculée, mise à jour à chaque installation).
+  const colLien = colOf_(g.sheet, 'lien');
+  const colCle = colOf_(g.sheet, 'cle');
+  const colId = colOf_(g.sheet, 'id');
+  for (let r = 2; r <= g.sheet.getLastRow(); r++) {
+    if (!norm_(g.sheet.getRange(r, colId).getValue())) continue;
+    g.sheet.getRange(r, colLien).setFormula('=Reglages!$B$3&"?k="&ENCODEURL(' + colLetter_(colCle) + r + ')');
+  }
+
+  // Supprime la feuille vide créée par défaut.
+  ['Feuille 1', 'Sheet1', 'Hoja 1', 'Foglio1', 'Tabelle1'].forEach(function (nm) {
+    const d = ss.getSheetByName(nm);
+    if (d && ss.getSheets().length > 1 && d.getLastRow() === 0) ss.deleteSheet(d);
+  });
+
+  // Déclencheur automatique (remplace l'ancien s'il existe) : toutes les 30 min ; l'email ne part qu'une fois
+  // l'heure limite (Reglages B6) passée, et seulement s'il y a de nouvelles lignes.
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'consoliderAuto') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('consoliderAuto').timeBased().everyMinutes(30).create();
+
+  // Déclencheur « OK CDE » : réagit aux modifications de la colonne Statut de l'onglet Commandes.
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'surModification') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('surModification').forSpreadsheet(ss).onEdit().create();
+
+  // Contrôle : le nom du client (colonne « nom » de Clients) est ce qui s'écrit dans « Lieu_Livraison ».
+  const garageNames = {};
+  table_('Garages').forEach(function (gr) {
+    [gr.nom, gr.atelier_libelle].forEach(function (v) { if (norm_(v)) garageNames[norm_(v).toLowerCase()] = true; });
+  });
+  const suspects = table_('Clients').filter(function (cl) {
+    return norm_(cl.id) && (!norm_(cl.nom) || garageNames[norm_(cl.nom).toLowerCase()]);
+  }).map(function (cl) { return norm_(cl.id); });
+  const avertClients = suspects.length
+    ? '\n\nATTENTION onglet Clients : la colonne « nom » est vide ou identique au nom d\'un garage pour : ' + suspects.join(', ') +
+      '. Mettez-y le nom du client : c\'est lui qui apparaît dans « Lieu_Livraison ».'
+    : '';
+
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Installation terminée.\n\n' +
+      '1. Onglet Reglages : tapez votre email en B1.\n' +
+      '2. Onglets Garages, Clients, Catalogue : remplacez les exemples par vos données.\n' +
+      '3. Les liens à donner aux garages sont dans l\'onglet Garages, colonne « lien ».\n' +
+      '4. Après chaque commande passée sur BibServ : onglet Commandes, choisissez OK CDE dans la colonne Statut des lignes concernées.' + avertClients
+    );
+  } catch (e) { /* pas d'interface (test) */ }
+}
+
+/** Envoie un email d'exemple pour vérifier la réception. Ne modifie aucune commande. */
+function menuEmailTest() {
+  const ui = SpreadsheetApp.getUi();
+  const to = setting_(1);
+  if (!to) {
+    ui.alert("Renseignez d'abord votre adresse email dans l'onglet Reglages (case B1).");
+    return;
+  }
+  const day = parisNow_().date;
+  const lots = [
+    { code_tiers: 'TL-EXEMPLE-1', lieu: 'EXEMPLE – Atelier Garage (SP)', garages: ['nord'], total: 7,
+      lignes: [
+        { cai: '154820', designation: '315/80 R22.5 X MULTI D (Remix)', quantite: 5 },
+        { cai: '262410', designation: '295/80 R22.5 X MULTI Z (Neuf)', quantite: 2 }
+      ] },
+    { code_tiers: 'TL-EXEMPLE-2', lieu: 'EXEMPLE – Transports Dupont', garages: ['nord', 'sud'], total: 4,
+      lignes: [{ cai: '154821', designation: '315/80 R22.5 X MULTI Z (Neuf)', quantite: 4 }] }
+  ];
+  MailApp.sendEmail({
+    to: to,
+    subject: '[TEST] [BibServ] ' + lots.length + ' lot(s) à commander – ' + frDate_(day),
+    body: 'EMAIL DE TEST – données d\'exemple, aucune commande réelle.\n\n' + emailText_(lots, day),
+    htmlBody: '<p style="background:#fff6d6;border:2px solid #f8c200;padding:8px 12px;font-family:Arial,sans-serif">' +
+      '<b>EMAIL DE TEST</b> – données d\'exemple, aucune commande réelle.</p>' + emailHtml_(lots, day, setting_(2)),
+    name: 'Commandes SP'
+  });
+  ui.alert('Email de test envoyé à ' + to + '.\nAucune commande réelle n\'a été modifiée.\n\nPensez à regarder aussi les courriers indésirables.');
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('Commandes SP')
+    .addItem('1. Installer (une seule fois)', 'installer')
+    .addItem('Remplacer les clés des garages par des clés courtes', 'menuNouvellesCles')
+    .addItem('Envoyer un email de test', 'menuEmailTest')
+    .addItem('Tout valider (OK CDE) : lignes déjà envoyées', 'menuToutValider')
+    .addItem('Lancer la consolidation maintenant', 'menuConsolider')
+    .addToUi();
+}

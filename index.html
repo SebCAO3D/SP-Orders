@@ -133,11 +133,6 @@
   .panel .none { padding: 14px; color: var(--discret); }
   .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 0.85rem; }
   .reco { background: #fff1b8; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
-  .stk { font-weight: 600; }
-  .stk::before { content: "● "; }
-  .stk.ok { color: var(--ok); }
-  .stk.faible { color: var(--alerte); }
-  .stk.rupture { color: var(--erreur); }
 
   /* ---- Quantité ---- */
   .qty { display: flex; justify-content: center; align-items: stretch; margin: 14px auto 0; width: 230px; max-width: 100%; }
@@ -303,7 +298,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxDhxOpHgF-Zv-b3PsG5s66_wMnSVo9N9OYjzHgB2lKkqoxaGJnZMK7qFXR3dDzvjY/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -403,7 +398,10 @@ function currentItem() { return state.cfg.catalogue.find((c) => String(c.ref) ==
 function allowedItems() {
   const p = currentPlace();
   const list = p && Array.isArray(p.cais) ? p.cais.map(String) : null;
-  return list ? state.cfg.catalogue.filter((c) => list.includes(String(c.ref))) : state.cfg.catalogue;
+  const items = list ? state.cfg.catalogue.filter((c) => list.includes(String(c.ref))) : state.cfg.catalogue;
+  // Ordre de présentation : Remix d'abord, puis Laurent, puis Neuf, puis le reste (ordre du catalogue conservé dans chaque famille).
+  const rank = (f) => { const x = String(f || "").toLowerCase(); return x.includes("remix") ? 0 : x.includes("laurent") ? 1 : x.includes("neuf") ? 2 : 3; };
+  return items.map((it, i) => [it, i]).sort((a, b) => rank(a[0].famille) - rank(b[0].famille) || a[1] - b[1]).map((x) => x[0]);
 }
 
 /** Doublon = même CAI, même lieu (code tiers), même jour. Uniquement quand un pneu est choisi. */
@@ -420,12 +418,6 @@ function editable(o) { return state.open && o.statut === "En attente" && !o.envo
 
 /* ---------- Rendu : formulaire ---------- */
 
-function stockInfo(item) {
-  const label = item.stock_libelle ||
-    (item.stock === "rupture" ? "Rupture de stock" : item.stock === "faible" ? "Stock faible" : "En stock");
-  return { cls: ["ok", "faible", "rupture"].includes(item.stock) ? item.stock : "ok", label };
-}
-
 function renderPick() {
   const item = currentItem();
   const name = $("pick-name");
@@ -440,11 +432,6 @@ function renderPick() {
     r.textContent = "★ Recommandé";
     tags.append(r);
   }
-  const si = stockInfo(item);
-  const s = document.createElement("span");
-  s.className = "stk " + si.cls;
-  s.textContent = si.label;
-  tags.append(s);
 }
 
 function renderForm() {
@@ -536,13 +523,8 @@ function renderPanel() {
     const m = document.createElement("div");
     m.className = "m";
     if (it.recommande) { const r = document.createElement("span"); r.className = "reco"; r.textContent = "★ Recommandé"; m.append(r); }
-    const si = stockInfo(it);
-    const s = document.createElement("span");
-    s.className = "stk " + si.cls;
-    s.textContent = si.label;
-    m.append(s);
-    b.append(n, m);
-    if (it.stock === "rupture") b.disabled = true;
+    b.append(n);
+    if (it.recommande) b.append(m);
     list.append(b);
   }
 }
@@ -615,9 +597,8 @@ function buildCai() {
       groups.set(item.famille, g);
       selCai.append(g);
     }
-    const text = `${item.recommande ? "★ " : ""}${item.designation}${item.cai ? ` – CAI ${item.cai}` : ""}` + (item.stock === "rupture" ? " (rupture)" : "");
+    const text = `${item.recommande ? "★ " : ""}${item.designation}${item.cai ? ` – CAI ${item.cai}` : ""}`;
     const opt = new Option(text, item.ref);
-    if (item.stock === "rupture") opt.disabled = true;
     groups.get(item.famille).append(opt);
   }
   selCai.value = [...selCai.options].some((o) => o.value === keep && !o.disabled) ? keep : "";
