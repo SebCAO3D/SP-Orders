@@ -107,6 +107,7 @@
 
   /* ---- Choix du pneu ---- */
   .pick { position: relative; }
+  .pickbox.off { opacity: .55; }
   .pickbox {
     background: var(--carte);
     border: 2px solid var(--trait);
@@ -299,7 +300,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxpjLtLdJio1I3yfq_6hpDb9CC5YFeWxDqoFa3gt-3109r-cb5xxsh8BgAoT3rMTGdq/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -312,7 +313,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   cfg: null, orders: [], history: [], historyLoaded: false,
   open: true, test: false, today: "",
-  tab: "order", mode: "atelier", qty: 1, filter: "En attente", busy: false, loading: false,
+  tab: "order", mode: "", qty: 1, filter: "En attente", busy: false, loading: false,
 };
 
 const fr = (iso) => (iso || "").split("-").reverse().join("/");
@@ -391,13 +392,13 @@ function clientLogo() {
 function atelier() { return state.cfg.lieux.find((p) => p.id === "atelier"); }
 function clients() { return state.cfg.lieux.filter((p) => p.type === "client"); }
 function currentPlace() {
-  if (state.mode === "atelier") return atelier();
+  if (state.mode === "atelier") return undefined;   // l'atelier (garage) ne permet aucun choix de pneu : seuls les clients commandent
   return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
 }
 function currentItem() { return state.cfg.catalogue.find((c) => String(c.ref) === $("sel-cai").value); }
 /** Références proposées pour le lieu choisi : un client peut être limité à certains CAI (colonne de l'onglet Clients). */
 function allowedItems() {
-  if (state.mode === "client" && !currentPlace()) return [];   // client pas encore choisi : rien à proposer
+  if (!currentPlace()) return [];   // lieu de livraison pas encore choisi : rien à proposer
   const p = currentPlace();
   const list = p && Array.isArray(p.cais) ? p.cais.map(String) : null;
   const items = list ? state.cfg.catalogue.filter((c) => list.includes(String(c.ref))) : state.cfg.catalogue;
@@ -467,18 +468,20 @@ function renderForm() {
       "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
   }
 
-  const noClient = state.mode === "client" && !currentPlace();
-  $("add").disabled = state.busy || state.loading || dup || !state.open || noClient || !item || state.qty < 1;
-  $("why").textContent = state.loading ? "Mise à jour…" : noClient ? "Choisissez un client" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
+  const noPlace = !currentPlace();
+  $("pickbox").classList.toggle("off", noPlace);
+  $("add").disabled = state.busy || state.loading || dup || !state.open || noPlace || !item || state.qty < 1;
+  $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? (state.mode === "atelier" ? "Commande possible uniquement pour un client" : state.mode === "client" ? "Choisissez un client" : "Choisissez d'abord un client") : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
   const selClient = $("sel-client");
+  const prev = selClient.value;
   selClient.replaceChildren();
-  // Aucun client n'est présélectionné : tant qu'on n'en choisit pas un, la commande est pour l'atelier.
+  // Rien n'est présélectionné : le garage doit choisir un client (ou l'atelier) avant de choisir le pneu.
   selClient.append(new Option("Choisir un client…", ""));
   for (const p of clients()) selClient.append(new Option(p.label, p.id));
-  selClient.value = "";
+  selClient.value = clients().some((p) => p.id === prev) ? prev : "";
 
   buildCai();
 }
@@ -505,8 +508,8 @@ function renderPanel() {
   if (items.length === 0) {
     const n = document.createElement("div");
     n.className = "none";
-    n.textContent = state.mode === "client" && !currentPlace()
-      ? "Choisissez d'abord un client."
+    n.textContent = !currentPlace()
+      ? (state.mode === "atelier" ? "Le choix d'un pneu se fait uniquement via un client." : "Choisissez d'abord un client.")
       : `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
     list.append(n);
     return;
@@ -612,7 +615,7 @@ function buildCai() {
     groups.get(item.famille).append(opt);
   }
   selCai.value = [...selCai.options].some((o) => o.value === keep && !o.disabled) ? keep : "";
-  if (!(state.mode === "client" && !currentPlace())) state.pickRef = selCai.value;   // client pas encore choisi : on garde le choix en mémoire
+  if (currentPlace()) state.pickRef = selCai.value;   // lieu pas encore choisi : on garde le choix en mémoire
   if (!$("pick-panel").hidden) renderPanel();
 }
 
