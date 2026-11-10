@@ -55,6 +55,9 @@
 
   /* ---- Lieu de livraison ---- */
   .places { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .addr-l { display: block; margin: 12px 0 4px; font-weight: 700; font-size: 13px; color: var(--nuit); }
+  .addr-l span { font-weight: 400; color: #5b6678; }
+  .addr { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #c9d3e3; border-radius: 10px; font: inherit; font-size: 16px; background: #fff; color: #14213d; }
   .places.single { grid-template-columns: 1fr; }
   .place {
     position: relative;
@@ -231,11 +234,15 @@
       <div class="place" id="p-client">
         <button type="button" class="place-btn" id="b-client" aria-pressed="false">
           <span class="ico-slot" id="ico-client"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></span>
-          <span class="t">Client utilisateur</span>
+          <span class="t" id="c-title">Client utilisateur</span>
+          <span class="s" id="c-sub"></span>
         </button>
         <select id="sel-client" aria-label="Client utilisateur"></select>
       </div>
     </div>
+
+    <label class="addr-l" for="adresse">Adresse de livraison <span>(modifiable)</span></label>
+    <input id="adresse" class="addr" type="text" maxlength="200" autocomplete="off" placeholder="Adresse de livraison">
 
     <h2 id="h-pneu">2. CHOIX DU PNEUMATIQUE</h2>
     <div class="pick">
@@ -285,7 +292,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbyBS4G-QlLnPITBapY_bqZgfFPti5VE2JdO2npj-G4dp_Yi6cAa3_VljMXXLBjMIqi-/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -438,10 +445,18 @@ function renderForm() {
   $("a-sub").textContent = a.adresse || a.code_tiers;
   setIcon("ico-atelier", a.logo || state.cfg.garage.logo);
   setIcon("ico-client", clientLogo());
+  // Le lieu de livraison affiché est le nom du client sélectionné (c'est aussi ce qui est enregistré et envoyé par email).
+  const cur = clients().find((x) => x.id === $("sel-client").value);
+  $("c-title").textContent = cur ? cur.label : "Client utilisateur";
+  $("c-sub").textContent = cur ? (cur.adresse || cur.code_tiers) : "";
   $("p-atelier").classList.toggle("on", state.mode === "atelier");
   $("p-client").classList.toggle("on", state.mode === "client");
   $("b-atelier").setAttribute("aria-pressed", String(state.mode === "atelier"));
   $("b-client").setAttribute("aria-pressed", String(state.mode === "client"));
+
+  // Adresse de livraison : préremplie avec celle du lieu choisi, puis librement modifiable.
+  const cp = currentPlace();
+  if (cp && state.addrPlace !== cp.id) { $("adresse").value = cp.adresse || ""; state.addrPlace = cp.id; }
 
   renderPick();
   const qi = $("q-val");
@@ -534,7 +549,7 @@ function renderCart() {
       name.textContent = o.designation;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `CAI ${o.cai}` + (o.date !== state.today ? ` · du ${fr(o.date)}` : "");
+      meta.textContent = `CAI ${o.cai}` + (o.date !== state.today ? ` · du ${fr(o.date)}` : "") + (o.adresse ? ` · ${o.adresse}` : "");
       left.append(name, meta);
 
       const right = document.createElement("div");
@@ -603,7 +618,7 @@ function renderHistory() {
       name.textContent = o.designation;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `CAI ${o.cai} · ${o.lieu}` + (o.valide_le ? ` · commandée le ${frStamp(o.valide_le)}` : "");
+      meta.textContent = `CAI ${o.cai} · ${o.lieu}` + (o.adresse ? ` · ${o.adresse}` : "") + (o.valide_le ? ` · commandée le ${frStamp(o.valide_le)}` : "");
       left.append(name, meta);
       const right = document.createElement("div");
       const q = document.createElement("span");
@@ -693,13 +708,14 @@ function addLine() {
     if (!place) throw new Error("Choisissez un lieu de livraison.");
     if (!item) throw new Error("Choisissez un pneu.");
     if (state.qty < 1) throw new Error("Saisissez une quantité (1 à 999).");
-    const data = await api("add", { lieu_id: place.id, cai: item.cai, quantite: state.qty });
+    const data = await api("add", { lieu_id: place.id, cai: item.cai, quantite: state.qty, adresse: $("adresse").value.trim() });
     state.orders.unshift(data.order);
     // Remise à zéro : le pneu qu'on vient d'ajouter n'est plus sélectionné,
     // donc le bandeau de doublon n'apparaît que si on le rechoisit.
     $("sel-cai").value = "";
     state.qty = 1;
     $("q-val").value = "1";
+    state.addrPlace = null;   // l'adresse revient à celle du lieu pour la prochaine ligne
     state.historyLoaded = false;
   });
 }
