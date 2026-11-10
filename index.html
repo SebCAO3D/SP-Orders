@@ -299,7 +299,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxpjLtLdJio1I3yfq_6hpDb9CC5YFeWxDqoFa3gt-3109r-cb5xxsh8BgAoT3rMTGdq/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -397,6 +397,7 @@ function currentPlace() {
 function currentItem() { return state.cfg.catalogue.find((c) => String(c.ref) === $("sel-cai").value); }
 /** Références proposées pour le lieu choisi : un client peut être limité à certains CAI (colonne de l'onglet Clients). */
 function allowedItems() {
+  if (state.mode === "client" && !currentPlace()) return [];   // client pas encore choisi : rien à proposer
   const p = currentPlace();
   const list = p && Array.isArray(p.cais) ? p.cais.map(String) : null;
   const items = list ? state.cfg.catalogue.filter((c) => list.includes(String(c.ref))) : state.cfg.catalogue;
@@ -445,7 +446,7 @@ function renderForm() {
   setIcon("ico-atelier", a.logo || state.cfg.garage.logo);
   setIcon("ico-client", clientLogo());
   // Le lieu de livraison affiché est le nom du client sélectionné (c'est aussi ce qui est enregistré et envoyé par email).
-  const cur = clients().find((x) => x.id === $("sel-client").value);
+  const cur = state.mode === "client" ? clients().find((x) => x.id === $("sel-client").value) : null;
   $("c-title").textContent = cur ? cur.label : "Client utilisateur";
   $("c-sub").textContent = cur ? (cur.adresse || cur.code_tiers) : "";
   $("p-atelier").classList.toggle("on", state.mode === "atelier");
@@ -466,14 +467,18 @@ function renderForm() {
       "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
   }
 
-  $("add").disabled = state.busy || state.loading || dup || !state.open || !item || state.qty < 1;
-  $("why").textContent = state.loading ? "Mise à jour…" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
+  const noClient = state.mode === "client" && !currentPlace();
+  $("add").disabled = state.busy || state.loading || dup || !state.open || noClient || !item || state.qty < 1;
+  $("why").textContent = state.loading ? "Mise à jour…" : noClient ? "Choisissez un client" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
   const selClient = $("sel-client");
   selClient.replaceChildren();
+  // Aucun client n'est présélectionné : tant qu'on n'en choisit pas un, la commande est pour l'atelier.
+  selClient.append(new Option("Choisir un client…", ""));
   for (const p of clients()) selClient.append(new Option(p.label, p.id));
+  selClient.value = "";
 
   buildCai();
 }
@@ -500,7 +505,9 @@ function renderPanel() {
   if (items.length === 0) {
     const n = document.createElement("div");
     n.className = "none";
-    n.textContent = `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
+    n.textContent = state.mode === "client" && !currentPlace()
+      ? "Choisissez d'abord un client."
+      : `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
     list.append(n);
     return;
   }
@@ -546,6 +553,7 @@ function closePanel(refocus) {
 function choose(ref) {
   const sel = $("sel-cai");
   sel.value = ref;
+  state.pickRef = ref;
   sel.dispatchEvent(new Event("change", { bubbles: true }));
   closePanel(true);
 }
@@ -588,7 +596,8 @@ function initPicker() {
 
 function buildCai() {
   const selCai = $("sel-cai");
-  const keep = selCai.value;
+  // Le pneu déjà choisi est conservé quand on change de lieu, s'il est autorisé pour ce lieu.
+  const keep = selCai.value || state.pickRef || "";
   selCai.replaceChildren(new Option("Choisir un pneu…", ""));
   const groups = new Map();
   for (const item of allowedItems()) {
@@ -603,6 +612,7 @@ function buildCai() {
     groups.get(item.famille).append(opt);
   }
   selCai.value = [...selCai.options].some((o) => o.value === keep && !o.disabled) ? keep : "";
+  if (!(state.mode === "client" && !currentPlace())) state.pickRef = selCai.value;   // client pas encore choisi : on garde le choix en mémoire
   if (!$("pick-panel").hidden) renderPanel();
 }
 
@@ -830,6 +840,7 @@ function addLine() {
     // Remise à zéro : le pneu qu'on vient d'ajouter n'est plus sélectionné,
     // donc le bandeau de doublon n'apparaît que si on le rechoisit.
     $("sel-cai").value = "";
+    state.pickRef = "";
     state.qty = 1;
     $("q-val").value = "1";
     state.historyLoaded = false;
@@ -928,9 +939,8 @@ async function init() {
   const pickClient = () => { state.mode = "client"; buildCai(); renderForm(); };
   $("b-atelier").addEventListener("click", () => { state.mode = "atelier"; buildCai(); renderForm(); });
   $("b-client").addEventListener("click", pickClient);
-  $("sel-client").addEventListener("focus", pickClient);
   $("sel-client").addEventListener("change", pickClient);
-  $("sel-cai").addEventListener("change", renderForm);
+  $("sel-cai").addEventListener("change", () => { state.pickRef = $("sel-cai").value; renderForm(); });
   initPicker();
   const qi = $("q-val");
   const setQty = (n) => { state.qty = n; qi.value = String(n); renderForm(); };
