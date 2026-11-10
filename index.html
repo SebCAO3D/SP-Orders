@@ -109,7 +109,7 @@
 
   /* ---- Choix du pneu ---- */
   .pick { position: relative; }
-  .pickbox.off { opacity: .55; }
+  .pickbox.off { opacity: .55; pointer-events: none; cursor: not-allowed; }
   .pickbox {
     background: var(--carte);
     border: 2px solid var(--trait);
@@ -303,7 +303,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbwLUEUTnF3UjK3JRGdinvi7Dd8nHfXxGE37ocFxGY5TJ2fvjCV8six1DaVq9kiOErma/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -470,6 +470,9 @@ function renderForm() {
 
   const noPlace = !currentPlace();
   $("pickbox").classList.toggle("off", noPlace);
+  $("pickbox").setAttribute("aria-disabled", String(noPlace));
+  $("pickbox").tabIndex = noPlace ? -1 : 0;
+  if (noPlace) closePanel(false);
   $("add").disabled = state.busy || state.loading || dup || !state.open || noPlace || !item || state.qty < 1;
   $("why").textContent = state.loading ? "Mise à jour…" : noPlace ? "Choisissez un client" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
@@ -508,9 +511,7 @@ function renderPanel() {
   if (items.length === 0) {
     const n = document.createElement("div");
     n.className = "none";
-    n.textContent = !currentPlace()
-      ? "Choisissez d'abord un client."
-      : `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
+    n.textContent = `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
     list.append(n);
     return;
   }
@@ -541,6 +542,7 @@ function renderPanel() {
 }
 
 function openPanel(prefill) {
+  if (!currentPlace()) return;   // pas de client : le choix du pneu est bloqué
   const p = $("pick-panel");
   $("pick-q").value = prefill || "";
   renderPanel();
