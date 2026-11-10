@@ -298,7 +298,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxgxqM8b6971eA4_6EiPN1fzNHSWNgbNapwby9GPG5vGNZFBu_XRaZrwFEwcqToH6sU/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -425,7 +425,7 @@ function renderPick() {
   tags.replaceChildren();
   name.classList.toggle("placeholder", !item);
   if (!item) { name.textContent = "Choisir un pneu…"; return; }
-  name.textContent = item.designation + (item.cai ? ` - CAI ${item.cai}` : "");
+  name.textContent = item.designation;
   if (item.recommande) {
     const r = document.createElement("span");
     r.className = "reco";
@@ -461,7 +461,7 @@ function renderForm() {
   $("dup").hidden = !dup;
   if (dup) {
     $("dup-msg").textContent =
-      `Vous avez déjà commandé ce pneu${item.cai ? ` (CAI ${item.cai})` : ""} aujourd'hui pour ce lieu. ` +
+      `Vous avez déjà commandé ce pneu aujourd'hui pour ce lieu. ` +
       "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
   }
 
@@ -481,11 +481,11 @@ function buildSelects() {
 
 const squash = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-/** « 315 » ou « 315-70 » ou « 315/70 » : ne garde que les pneus dont la désignation (ou le CAI) COMMENCE par la saisie. */
+/** « 315 » ou « 315-70 » ou « 315/70 » : ne garde que les pneus dont la désignation COMMENCE par la saisie. */
 function filterItems(q) {
   const k = squash(q);
   const all = allowedItems();
-  return k ? all.filter((it) => squash(it.designation).startsWith(k) || squash(it.cai).startsWith(k)) : all;
+  return k ? all.filter((it) => squash(it.designation).startsWith(k)) : all;
 }
 
 function renderPanel() {
@@ -519,7 +519,7 @@ function renderPanel() {
     b.dataset.ref = it.ref;
     const n = document.createElement("div");
     n.className = "n";
-    n.textContent = it.designation + (it.cai ? ` – CAI ${it.cai}` : "");
+    n.textContent = it.designation;
     const m = document.createElement("div");
     m.className = "m";
     if (it.recommande) { const r = document.createElement("span"); r.className = "reco"; r.textContent = "★ Recommandé"; m.append(r); }
@@ -597,7 +597,7 @@ function buildCai() {
       groups.set(item.famille, g);
       selCai.append(g);
     }
-    const text = `${item.recommande ? "★ " : ""}${item.designation}${item.cai ? ` – CAI ${item.cai}` : ""}`;
+    const text = `${item.recommande ? "★ " : ""}${item.designation}`;
     const opt = new Option(text, item.ref);
     groups.get(item.famille).append(opt);
   }
@@ -651,7 +651,7 @@ function renderCart() {
       name.textContent = o.designation;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = [o.cai ? `CAI ${o.cai}` : "", o.date !== state.today ? `du ${fr(o.date)}` : "", o.adresse || ""].filter(Boolean).join(" · ");
+      meta.textContent = [o.date !== state.today ? `du ${fr(o.date)}` : "", o.adresse || ""].filter(Boolean).join(" · ");
       left.append(name, meta);
 
       const right = document.createElement("div");
@@ -720,7 +720,7 @@ function renderHistory() {
       name.textContent = o.designation;
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = [o.cai ? `CAI ${o.cai}` : "", o.lieu, o.adresse || "", o.valide_le ? `commandée le ${frStamp(o.valide_le)}` : ""].filter(Boolean).join(" · ");
+      meta.textContent = [o.lieu, o.adresse || "", o.valide_le ? `commandée le ${frStamp(o.valide_le)}` : ""].filter(Boolean).join(" · ");
       left.append(name, meta);
       const right = document.createElement("div");
       const q = document.createElement("span");
