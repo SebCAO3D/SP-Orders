@@ -56,6 +56,8 @@
   /* ---- Lieu de livraison ---- */
   .places { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .places.single { grid-template-columns: 1fr; }
+  .place.info { cursor: default; }
+  .place-btn.static { pointer-events: none; }
   .place {
     position: relative;
     background: var(--carte);
@@ -229,8 +231,15 @@
 
   <!-- ===== Onglet Commander ===== -->
   <section id="tab-order">
-    <h2 id="h-lieu">1. CLIENT UTILISATEUR</h2>
-    <div class="places single" id="places" role="group" aria-labelledby="h-lieu">
+    <h2 id="h-lieu">1. LIEU DE LIVRAISON</h2>
+    <div class="places" id="places" role="group" aria-labelledby="h-lieu">
+      <div class="place info" id="p-atelier">
+        <div class="place-btn static">
+          <span class="ico-slot" id="ico-atelier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6"/><path d="M5 9.5V20h14V9.5"/><path d="M8 13h8M8 16h8M8 19h8"/></svg></span>
+          <span class="t" id="a-title">Atelier garage (SP)</span>
+          <span class="s" id="a-sub"></span>
+        </div>
+      </div>
       <div class="place on" id="p-client">
         <button type="button" class="place-btn" id="b-client" aria-pressed="false">
           <span class="ico-slot" id="ico-client"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 6h12v10H2z"/><path d="M14 9h4l4 4v3h-8z"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></span>
@@ -383,6 +392,7 @@ function clientLogo() {
   return c ? c.logo : "";
 }
 
+function atelier() { return state.cfg.lieux.find((p) => p.id === "atelier"); }
 function clients() { return state.cfg.lieux.filter((p) => p.type === "client"); }
 function currentPlace() {
   return state.cfg.lieux.find((p) => p.id === $("sel-client").value);
@@ -430,8 +440,14 @@ function renderPick() {
 }
 
 function renderForm() {
+  const a = atelier();
   const cl = clients();
   $("p-client").hidden = cl.length === 0;
+  $("places").classList.toggle("single", cl.length === 0);
+  // Carte du garage : simple information, non sélectionnable (on ne commande que pour un client).
+  $("a-title").textContent = a ? a.label : state.cfg.garage.nom;
+  $("a-sub").textContent = a ? (a.adresse || a.code_tiers) : "";
+  setIcon("ico-atelier", (a && a.logo) || state.cfg.garage.logo);
   setIcon("ico-client", clientLogo());
   // Le lieu de livraison affiché est le nom du client sélectionné (c'est aussi ce qui est enregistré et envoyé par email).
   const cur = clients().find((x) => x.id === $("sel-client").value);
