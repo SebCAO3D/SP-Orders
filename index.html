@@ -299,7 +299,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbx7StylWtlm1B8Z6JiSRduDa63YPq5VMmlssu4E09unx4oi2MQrSYI8DbVX-V8Q5p-a/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -312,7 +312,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   cfg: null, orders: [], history: [], historyLoaded: false,
   open: true, test: false, today: "",
-  tab: "order", mode: "atelier", qty: 1, filter: "En attente", busy: false,
+  tab: "order", mode: "atelier", qty: 1, filter: "En attente", busy: false, loading: false,
 };
 
 const fr = (iso) => (iso || "").split("-").reverse().join("/");
@@ -466,8 +466,8 @@ function renderForm() {
       "Merci de modifier la quantité sur la commande existante ou de choisir une autre destination.";
   }
 
-  $("add").disabled = state.busy || dup || !state.open || !item || state.qty < 1;
-  $("why").textContent = !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
+  $("add").disabled = state.busy || state.loading || dup || !state.open || !item || state.qty < 1;
+  $("why").textContent = state.loading ? "Mise à jour…" : !state.open ? "Saisie fermée" : dup ? "Impossible de valider (doublon)" : !item ? "Choisissez un pneu" : state.qty < 1 ? "Saisissez une quantité" : "";
 }
 
 function buildSelects() {
@@ -625,6 +625,13 @@ function renderCart() {
   box.replaceChildren();
   $("today").textContent = fr(state.today);
 
+  if (state.loading) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Chargement…";
+    box.append(p);
+    return;
+  }
   if (state.orders.length === 0) {
     const p = document.createElement("p");
     p.className = "empty";
@@ -746,8 +753,8 @@ function emptyP(t) { const p = document.createElement("p"); p.className = "empty
 /* ---------- Rendu global ---------- */
 
 function renderAll() {
-  $("testmode").hidden = !state.test;
-  const closed = !state.open;
+  $("testmode").hidden = !state.test || state.loading;
+  const closed = !state.open && !state.loading;
   $("closed").hidden = !closed;
   if (closed) $("closed-msg").textContent = state.cfg.message || "Saisie fermée.";
   $("g-date").textContent = fr(state.today);
@@ -870,18 +877,51 @@ async function init() {
   if (!KEY) {
     return fatal("Lien incomplet. Utilisez le lien complet fourni par l'administrateur.");
   }
-  try {
-    state.cfg = await api("config");
-  } catch (e) {
-    return fatal(e.message);
+  // Chargement rapide : la configuration est demandée tout de suite ; si elle a déjà été vue sur cet appareil,
+  // l'écran s'affiche immédiatement (saisie bloquée le temps de la mise à jour).
+  const pending = api("config").then((d) => ({ d }), (e) => ({ e }));
+  const CK = "sp_cfg_" + KEY;
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(CK) || "null"); } catch { cached = null; }
+  const usable = cached && cached.garage && Array.isArray(cached.lieux) && Array.isArray(cached.catalogue);
+  const sig = (c) => JSON.stringify([c.garage, c.lieux, c.catalogue]);
+
+  const showShell = () => {
+    $("g-name").textContent = state.cfg.garage.nom;
+    document.title = `${state.cfg.garage.nom} – Commandes`;
+    $("idband").hidden = false;
+    buildSelects();
+    $("app").hidden = false;
+    $("nav").hidden = false;
+  };
+
+  if (usable) {
+    state.cfg = cached;
+    state.loading = true;
+    state.open = false;
+    state.today = cached.today || "";
+    showShell();
+    renderAll();
   }
-  state.today = state.cfg.today;
-  state.open = state.cfg.open;
-  state.test = !!state.cfg.test;
-  $("g-name").textContent = state.cfg.garage.nom;
-  document.title = `${state.cfg.garage.nom} – Commandes`;
-  $("idband").hidden = false;
-  buildSelects();
+
+  const res = await pending;
+  if (res.e) {
+    if (res.e.status === 401) { try { localStorage.removeItem(CK); } catch {} }
+    if (!usable || res.e.status === 401) return fatal(res.e.message);
+    showError(res.e.message);
+    return;
+  }
+  const fresh = res.d;
+  try { const { orders: _o, ...toCache } = fresh; localStorage.setItem(CK, JSON.stringify(toCache)); } catch {}
+  const changed = !usable || sig(fresh) !== sig(cached);
+  state.cfg = fresh;
+  state.today = fresh.today;
+  state.open = fresh.open;
+  state.test = !!fresh.test;
+  state.loading = false;
+  if (Array.isArray(fresh.orders)) state.orders = fresh.orders;
+  if (changed) showShell();
+  else { $("g-name").textContent = fresh.garage.nom; }
   $("app").hidden = false;
   $("nav").hidden = false;
 
@@ -911,7 +951,7 @@ async function init() {
   $("n-order").addEventListener("click", () => setTab("order"));
   $("n-track").addEventListener("click", () => setTab("track"));
 
-  await refresh();
+  if (Array.isArray(fresh.orders)) renderAll(); else await refresh();
   setInterval(() => { refresh(true); if (state.tab === "track") loadHistory(); }, 60000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { refresh(true); if (state.tab === "track") loadHistory(); }
