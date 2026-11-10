@@ -17,7 +17,7 @@ const DEFAULT_CUTOFF = 17 * 60 + 30; // clôture par défaut : 17h30 (modifiable
 const MAX_QTY = 999;
 const PENDING = 'En attente';
 const ORDERED = 'OK CDE';      // l'administrateur a validé la ligne dans l'onglet Commandes
-const ORDER_COLS = ['Date', 'Garage', 'Lieu_Livraison', 'Code_Tiers_Livre', 'Code_CAI', 'Designation', 'Quantite', 'Statut', 'ID', 'Envoye', 'Date_Validation', 'Adresse_Livraison'];
+const ORDER_COLS = ['Date', 'Garage', 'Lieu_Livraison', 'Code_Tiers_Livre', 'Code_CAI', 'Designation', 'Quantite', 'Statut', 'ID', 'Envoye', 'Date_Validation', 'Adresse_Livraison', 'Date_Livraison'];
 const COL_QTY = 7;     // colonne G
 const COL_STATUS = 8;  // colonne H
 
@@ -205,7 +205,8 @@ function toOrder_(r) {
     // Deux statuts visibles seulement : « En attente » ou « Commandée » (= OK CDE dans le Sheet).
     statut: isOrdered_(r.Statut) ? 'Commandée' : PENDING,
     envoye: !!norm_(r.Envoye),
-    valide_le: isOrdered_(r.Statut) ? asStamp_(r.Date_Validation) : ''
+    valide_le: isOrdered_(r.Statut) ? asStamp_(r.Date_Validation) : '',
+    livraison: (function (v) { const d = asDate_(v); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; })(r.Date_Livraison)   // date de livraison prévue, saisie par l'administrateur
   };
 }
 
@@ -857,6 +858,13 @@ function installer() {
     SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false)
       .setHelpText('Choisissez une date dans le calendrier.').build()
   );
+  // Date de livraison prévue : choisie au calendrier, visible par le garage dans le Suivi.
+  const colDL = colOf_(cmd, 'Date_Livraison');
+  cmd.getRange(2, colDL, 999, 1).setNumberFormat('dd/MM/yyyy');
+  cmd.getRange(2, colDL, 999, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireDate().setAllowInvalid(false)
+      .setHelpText('Choisissez la date de livraison prévue dans le calendrier.').build()
+  );
   // Colonnes techniques masquées (ID, Envoye) pour garder un tableau simple.
   cmd.hideColumns(colOf_(cmd, 'ID'));
   cmd.hideColumns(colOf_(cmd, 'Envoye'));
@@ -956,12 +964,12 @@ function installer() {
     if (d && ss.getSheets().length > 1 && d.getLastRow() === 0) ss.deleteSheet(d);
   });
 
-  // Déclencheur automatique (remplace l'ancien s'il existe) : toutes les 30 min ; l'email ne part qu'une fois
+  // Déclencheur automatique (remplace l'ancien s'il existe) : toutes les minutes (Google peut décaler d'environ une minute) ; l'email ne part qu'une fois
   // l'heure limite (Reglages B6) passée, et seulement s'il y a de nouvelles lignes.
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'consoliderAuto') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('consoliderAuto').timeBased().everyMinutes(30).create();
+  ScriptApp.newTrigger('consoliderAuto').timeBased().everyMinutes(1).create();
 
   // Déclencheur « OK CDE » : réagit aux modifications de la colonne Statut de l'onglet Commandes.
   ScriptApp.getProjectTriggers().forEach(function (t) {
