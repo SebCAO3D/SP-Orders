@@ -117,8 +117,20 @@
   .pickbox .name { font-weight: 800; line-height: 1.3; }
   .pickbox .placeholder { color: var(--discret); font-weight: 600; }
   .pickbox .chev { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--discret); pointer-events: none; }
-  .pick select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
-  .pick:focus-within .pickbox { outline: 3px solid var(--action); outline-offset: 2px; }
+  .pickbox { cursor: pointer; }
+  .pick select { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .pick:focus-within .pickbox, .pickbox:focus-visible { outline: 3px solid var(--action); outline-offset: 2px; }
+  .panel { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20; background: var(--carte); border: 2px solid var(--action); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,30,80,.25); overflow: hidden; }
+  .panel[hidden] { display: none; }
+  .panel input { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--trait); padding: 14px; font: inherit; font-size: 16px; outline: none; }
+  .panel .list { max-height: min(55vh, 380px); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .panel .grp { padding: 8px 14px 4px; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--discret); background: #f4f6fa; }
+  .panel .opt { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #eef1f6; padding: 10px 14px; font: inherit; cursor: pointer; color: inherit; }
+  .panel .opt:hover, .panel .opt:focus-visible, .panel .opt.act { background: #eaf1ff; outline: none; }
+  .panel .opt .n { font-weight: 700; }
+  .panel .opt .m { font-size: 12px; margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .panel .opt[disabled] { opacity: .5; cursor: not-allowed; }
+  .panel .none { padding: 14px; color: var(--discret); }
   .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px; font-size: 0.85rem; }
   .reco { background: #fff1b8; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
   .stk { font-weight: 600; }
@@ -240,12 +252,17 @@
 
     <h2 id="h-pneu">2. CHOIX DU PNEUMATIQUE</h2>
     <div class="pick">
-      <div class="pickbox" aria-hidden="true">
+      <div class="pickbox" id="pickbox" role="combobox" tabindex="0" aria-haspopup="listbox" aria-expanded="false" aria-controls="pick-panel" aria-labelledby="h-pneu pick-name">
         <div class="name" id="pick-name"></div>
         <div class="tags" id="pick-tags"></div>
         <span class="chev">▾</span>
       </div>
-      <select id="sel-cai" aria-labelledby="h-pneu"></select>
+      <select id="sel-cai" aria-hidden="true" tabindex="-1"></select>
+      <div class="panel" id="pick-panel" hidden>
+        <input id="pick-q" type="text" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="Tapez la dimension, ex. 315 ou 315/70" aria-label="Filtrer par dimension">
+        <div class="list" id="pick-list" role="listbox" aria-labelledby="h-pneu"></div>
+      </div>
     </div>
 
     <div class="qty" role="group" aria-label="Quantité">
@@ -286,7 +303,7 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbxDhxOpHgF-Zv-b3PsG5s66_wMnSVo9N9OYjzHgB2lKkqoxaGJnZMK7qFXR3dDzvjY/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxQ9WhFpFKn-Kw3zeh1bfT6-5a59oNsplsRehrwaAAsIdOp7Vs5usJ0AfFMRAqy2wNR/exec";
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -473,6 +490,119 @@ function buildSelects() {
   buildCai();
 }
 
+/* ---------- Liste déroulante avec recherche par début de dimension ---------- */
+
+const squash = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** « 315 » ou « 315-70 » ou « 315/70 » : ne garde que les pneus dont la désignation (ou le CAI) COMMENCE par la saisie. */
+function filterItems(q) {
+  const k = squash(q);
+  const all = allowedItems();
+  return k ? all.filter((it) => squash(it.designation).startsWith(k) || squash(it.cai).startsWith(k)) : all;
+}
+
+function renderPanel() {
+  const list = $("pick-list");
+  list.replaceChildren();
+  // Regroupe par famille (Neuf / Remix / Laurent…) dans l'ordre d'apparition du catalogue.
+  const order = [];
+  const found = filterItems($("pick-q").value);
+  for (const it of found) if (!order.includes(it.famille)) order.push(it.famille);
+  const items = order.flatMap((f) => found.filter((it) => it.famille === f));
+  if (items.length === 0) {
+    const n = document.createElement("div");
+    n.className = "none";
+    n.textContent = `Aucun pneu ne commence par « ${$("pick-q").value.trim()} ».`;
+    list.append(n);
+    return;
+  }
+  let fam = null;
+  for (const it of items) {
+    if (it.famille !== fam) {
+      fam = it.famille;
+      const h = document.createElement("div");
+      h.className = "grp";
+      h.textContent = fam;
+      list.append(h);
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "opt";
+    b.setAttribute("role", "option");
+    b.dataset.ref = it.ref;
+    const n = document.createElement("div");
+    n.className = "n";
+    n.textContent = it.designation + (it.cai ? ` – CAI ${it.cai}` : "");
+    const m = document.createElement("div");
+    m.className = "m";
+    if (it.recommande) { const r = document.createElement("span"); r.className = "reco"; r.textContent = "★ Recommandé"; m.append(r); }
+    const si = stockInfo(it);
+    const s = document.createElement("span");
+    s.className = "stk " + si.cls;
+    s.textContent = si.label;
+    m.append(s);
+    b.append(n, m);
+    if (it.stock === "rupture") b.disabled = true;
+    list.append(b);
+  }
+}
+
+function openPanel(prefill) {
+  const p = $("pick-panel");
+  $("pick-q").value = prefill || "";
+  renderPanel();
+  p.hidden = false;
+  $("pickbox").setAttribute("aria-expanded", "true");
+  $("pick-q").focus();
+}
+function closePanel(refocus) {
+  $("pick-panel").hidden = true;
+  $("pickbox").setAttribute("aria-expanded", "false");
+  if (refocus) $("pickbox").focus();
+}
+function choose(ref) {
+  const sel = $("sel-cai");
+  sel.value = ref;
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
+  closePanel(true);
+}
+
+function initPicker() {
+  const box = $("pickbox");
+  box.addEventListener("click", () => ($("pick-panel").hidden ? openPanel("") : closePanel(false)));
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") { e.preventDefault(); openPanel(""); }
+    else if (e.key.length === 1 && /[a-z0-9]/i.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); openPanel(e.key); }
+  });
+  $("pick-q").addEventListener("input", renderPanel);
+  $("pick-q").addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.preventDefault(); closePanel(true); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const first = $("pick-list").querySelector(".opt:not([disabled])");
+      if (first) choose(first.dataset.ref);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const first = $("pick-list").querySelector(".opt:not([disabled])");
+      if (first) first.focus();
+    }
+  });
+  $("pick-list").addEventListener("click", (e) => {
+    const b = e.target.closest(".opt");
+    if (b && !b.disabled) choose(b.dataset.ref);
+  });
+  $("pick-list").addEventListener("keydown", (e) => {
+    const opts = [...$("pick-list").querySelectorAll(".opt:not([disabled])")];
+    const i = opts.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" && i < opts.length - 1) { e.preventDefault(); opts[i + 1].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? opts[i - 1] : $("pick-q")).focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); closePanel(true); }
+  });
+  document.addEventListener("click", (e) => {
+    if (!$("pick-panel").hidden && !e.target.closest(".pick")) closePanel(false);
+  });
+}
+
 function buildCai() {
   const selCai = $("sel-cai");
   const keep = selCai.value;
@@ -491,6 +621,7 @@ function buildCai() {
     groups.get(item.famille).append(opt);
   }
   selCai.value = [...selCai.options].some((o) => o.value === keep && !o.disabled) ? keep : "";
+  if (!$("pick-panel").hidden) renderPanel();
 }
 
 /* ---------- Rendu : panier ---------- */
@@ -771,6 +902,7 @@ async function init() {
   $("sel-client").addEventListener("focus", pickClient);
   $("sel-client").addEventListener("change", pickClient);
   $("sel-cai").addEventListener("change", renderForm);
+  initPicker();
   const qi = $("q-val");
   const setQty = (n) => { state.qty = n; qi.value = String(n); renderForm(); };
   $("q-minus").addEventListener("click", () => setQty(Math.max(1, (state.qty || 1) - 1)));
