@@ -982,7 +982,7 @@ function installer() {
   const colId = colOf_(g.sheet, 'id');
   for (let r = 2; r <= g.sheet.getLastRow(); r++) {
     if (!norm_(g.sheet.getRange(r, colId).getValue())) continue;
-    g.sheet.getRange(r, colLien).setFormula('=Reglages!$B$3&"?k="&ENCODEURL(' + colLetter_(colCle) + r + ')');
+    g.sheet.getRange(r, colLien).setFormula('=Reglages!$B$3&IF(ISNUMBER(SEARCH("?",Reglages!$B$3)),"&k=","?k=")&ENCODEURL(' + colLetter_(colCle) + r + ')');
   }
 
   // Supprime la feuille vide créée par défaut.

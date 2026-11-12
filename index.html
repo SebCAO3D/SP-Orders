@@ -304,7 +304,12 @@
 "use strict";
 
 /* ========= À MODIFIER UNE SEULE FOIS ========= */
-const API_URL = "https://script.google.com/macros/s/AKfycbwLUEUTnF3UjK3JRGdinvi7Dd8nHfXxGE37ocFxGY5TJ2fvjCV8six1DaVq9kiOErma/exec";
+// Un secteur = un ADF = un Google Sheet + son script. Le lien d'un garage contient ?s=<secteur>&k=<clé>.
+// Sans « s » dans le lien : secteur "" (celui d'origine). Pour ajouter un ADF, ajouter une ligne ci-dessous.
+const BACKENDS = {
+  "": "https://script.google.com/macros/s/AKfycbwLUEUTnF3UjK3JRGdinvi7Dd8nHfXxGE37ocFxGY5TJ2fvjCV8six1DaVq9kiOErma/exec",
+  // "nord": "https://script.google.com/macros/s/XXXX/exec",
+};
 const TITRE = "MICHELIN MS&S - Commandes";
 const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de votre propre logo (ex. "logo.png" envoyé dans le dépôt)
 /* ============================================= */
@@ -312,6 +317,8 @@ const LOGO_URL = "logos/michelin-transparent.png"; // optionnel : adresse de vot
 const qs = new URLSearchParams(location.search);
 const GARAGE = (qs.get("garage") || "").trim().toLowerCase();
 const KEY = qs.get("k") || "";
+const SECTEUR = (qs.get("s") || "").trim().toLowerCase();
+const API_URL = Object.prototype.hasOwnProperty.call(BACKENDS, SECTEUR) ? BACKENDS[SECTEUR] : "";
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -895,6 +902,9 @@ async function init() {
     lg.addEventListener("error", () => { lg.hidden = true; });
     lg.src = LOGO_URL;
   }
+  if (!API_URL) {
+    return fatal("Lien incorrect (secteur inconnu). Utilisez le lien complet fourni par votre ADF.");
+  }
   if (API_URL.startsWith("COLLEZ")) {
     return fatal("Page non configurée : l'administrateur doit renseigner l'adresse de l'application Google dans index.html.");
   }
@@ -904,7 +914,7 @@ async function init() {
   // Chargement rapide : la configuration est demandée tout de suite ; si elle a déjà été vue sur cet appareil,
   // l'écran s'affiche immédiatement (saisie bloquée le temps de la mise à jour).
   const pending = api("config").then((d) => ({ d }), (e) => ({ e }));
-  const CK = "sp_cfg_" + KEY;
+  const CK = "sp_cfg_" + SECTEUR + "_" + KEY;
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(CK) || "null"); } catch { cached = null; }
   const usable = cached && cached.garage && Array.isArray(cached.lieux) && Array.isArray(cached.catalogue);
