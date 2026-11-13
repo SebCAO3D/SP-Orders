@@ -864,6 +864,22 @@ function migrerAnciennesDonnees_(sh) {
   if (oldLots && ss_().getSheets().length > 1) ss_().deleteSheet(oldLots);
 }
 
+// Formule du lien d'un garage. B3 peut déjà contenir un secteur (?s=nord) : on ajoute alors &k= au lieu de ?k=.
+// Selon la langue du Sheet, les arguments se séparent par une virgule ou un point-virgule : on essaie les deux,
+// puis on retombe sur la formule simple (sans secteur) si aucune ne passe.
+function setLienFormula_(cell, cleRef) {
+  const variantes = [',', ';'].map(function (sep) {
+    return '=Reglages!$B$3&IF(ISNUMBER(FIND("?"' + sep + 'Reglages!$B$3))' + sep + '"&k="' + sep + '"?k=")&ENCODEURL(' + cleRef + ')';
+  });
+  variantes.push('=Reglages!$B$3&"?k="&ENCODEURL(' + cleRef + ')');
+  for (let i = 0; i < variantes.length; i++) {
+    cell.setFormula(variantes[i]);
+    SpreadsheetApp.flush();
+    const v = String(cell.getDisplayValue());
+    if (v && v.charAt(0) !== '#') return;
+  }
+}
+
 function installer() {
   const ss = ss_();
   ss.setSpreadsheetTimeZone(TZ);
@@ -982,7 +998,7 @@ function installer() {
   const colId = colOf_(g.sheet, 'id');
   for (let r = 2; r <= g.sheet.getLastRow(); r++) {
     if (!norm_(g.sheet.getRange(r, colId).getValue())) continue;
-    g.sheet.getRange(r, colLien).setFormula('=Reglages!$B$3&IF(ISNUMBER(SEARCH("?",Reglages!$B$3)),"&k=","?k=")&ENCODEURL(' + colLetter_(colCle) + r + ')');
+    setLienFormula_(g.sheet.getRange(r, colLien), colLetter_(colCle) + r);
   }
 
   // Supprime la feuille vide créée par défaut.
